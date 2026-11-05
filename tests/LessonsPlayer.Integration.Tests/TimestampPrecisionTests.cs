@@ -11,11 +11,17 @@ namespace LessonsPlayer.Integration.Tests;
 
 /// <summary>
 /// Mede a precisão dos timestamps por palavra comparando a transcrição com o tempo real de cada
-/// palavra de um áudio sintetizado (TTS do Windows). Baixa o modelo na primeira execução.
+/// palavra de um áudio sintetizado (TTS do Windows). Baixa os modelos na primeira execução.
+/// <para>
+/// Modelos testados: variável de ambiente <c>LESSONSPLAYER_TEST_MODELS</c> (ids separados por vírgula,
+/// ex.: <c>small-q5_1,large-v3-turbo-q5_0</c>); padrão <c>base-q5_1,small-q5_1</c>.
+/// </para>
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class TimestampPrecisionTests : IDisposable
 {
+    private const string ModelsVariable = "LESSONSPLAYER_TEST_MODELS";
+
     private const string PortugueseText =
         "Olá, pessoal. Hoje vamos estudar a diferença entre os tempos verbais do inglês. " +
         "Primeiro, vamos ouvir alguns exemplos simples. Depois, cada um vai repetir as frases em voz alta. " +
@@ -28,12 +34,25 @@ public sealed class TimestampPrecisionTests : IDisposable
 
     private readonly string _workDirectory = Directory.CreateTempSubdirectory("lessonsplayer-tests-").FullName;
 
+    public static TheoryData<string, string, string> Cases()
+    {
+        var models = (Environment.GetEnvironmentVariable(ModelsVariable) ?? "base-q5_1,small-q5_1")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        var data = new TheoryData<string, string, string>();
+        foreach (var model in models)
+        {
+            data.Add("pt-BR", "pt", model);
+            data.Add("en-US", "en", model);
+        }
+
+        return data;
+    }
+
     public void Dispose() => Directory.Delete(_workDirectory, recursive: true);
 
     [Theory]
-    [InlineData("pt-BR", "pt", "base-q5_1")]
-    [InlineData("pt-BR", "pt", "small-q5_1")]
-    [InlineData("en-US", "en", "small-q5_1")]
+    [MemberData(nameof(Cases))]
     public async Task Word_start_times_match_spoken_audio(string culture, string language, string modelId)
     {
         var ct = TestContext.Current.CancellationToken;

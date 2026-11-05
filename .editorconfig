@@ -71,3 +71,5 @@ dotnet_diagnostic.CA2007.severity = none
 dotnet_diagnostic.CA1707.severity = none
 dotnet_diagnostic.CA1515.severity = none
 dotnet_diagnostic.CA2000.severity = none
+# Fakes descartáveis vivem o tempo de um teste.
+dotnet_diagnostic.CA1001.severity = none

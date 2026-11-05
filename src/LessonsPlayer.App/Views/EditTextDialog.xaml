@@ -1,0 +1,15 @@
+<Window x:Class="LessonsPlayer.App.Views.EditTextDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:res="clr-namespace:LessonsPlayer.Presentation.Resources;assembly=LessonsPlayer.Presentation"
+        Width="560" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize" ShowInTaskbar="False">
+  <StackPanel Margin="16">
+    <TextBox x:Name="Editor" TextWrapping="Wrap" AcceptsReturn="False" FontSize="16"
+             MinHeight="72" Padding="6" VerticalScrollBarVisibility="Auto" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+      <Button Content="OK" IsDefault="True" MinWidth="88" Padding="10,4" Click="OnOk" />
+      <Button Content="{x:Static res:UiText.Cancel}" IsCancel="True" MinWidth="88" Padding="10,4" Margin="8,0,0,0" />
+    </StackPanel>
+  </StackPanel>
+</Window>

@@ -10,8 +10,10 @@ namespace LessonsPlayer.Core.Transcription;
 /// <param name="End">Fim estimado pelo decodificador.</param>
 /// <param name="AlignedEnd">
 /// Fim do token segundo o alinhamento DTW, ou <c>null</c> se indisponível. O whisper.cpp grava no
-/// <c>t_dtw</c> de cada token o instante em que o alinhamento passa para o token seguinte, ou seja,
-/// o fim deste token, que coincide com o início do próximo.
+/// <c>t_dtw</c> do token i o instante em que o caminho do DTW entra no token i+1, ou seja, o fim do
+/// token i. É um índice deslocado em relação ao <c>start_times</c> da implementação da OpenAI
+/// (whisper/timing.py); ver <c>whisper_exp_compute_token_level_timestamps_dtw</c> em src/whisper.cpp,
+/// onde <c>last_v</c> começa em 0 e a entrada na primeira linha é descartada. Resolução de 20 ms.
 /// </param>
 public sealed record RecognizedToken(string Text, TimeSpan Start, TimeSpan End, TimeSpan? AlignedEnd);
 

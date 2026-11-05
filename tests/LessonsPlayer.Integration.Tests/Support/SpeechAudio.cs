@@ -13,8 +13,12 @@ internal sealed record SpokenWord(string Text, TimeSpan Start);
 internal sealed record SpeechAudio(string FilePath, IReadOnlyList<SpokenWord> Words)
 {
     /// <summary>
-    /// Formato em que o SAPI reporta <c>AudioPosition</c> corretamente. Em outros formatos o valor vem
-    /// escalado como se o fluxo fosse 16 kHz mono 16 bits (bug conhecido do System.Speech).
+    /// Formato nativo das vozes do Windows (ex.: Zira, Maria): o único em que <c>AudioPosition</c> sai correto.
+    /// Bug do System.Speech (não documentado): <c>AudioFileOut.Duration</c> divide os bytes já convertidos
+    /// para o formato de saída pelo <c>nAvgBytesPerSec</c> do formato do engine. Ver
+    /// dotnet/runtime src/libraries/System.Speech/src/Internal/Synthesis/AudioFileOut.cs
+    /// (<c>_bytesWritten * TicksPerSecond / _wfxIn.nAvgBytesPerSec</c>). Medido: a 22.050 Hz estéreo, a
+    /// posição sai multiplicada por 88.200/32.000 = 2,756.
     /// </summary>
     private const int SapiReferenceSampleRate = 16_000;
 
@@ -43,6 +47,18 @@ internal sealed record SpeechAudio(string FilePath, IReadOnlyList<SpokenWord> Wo
 
         synthesizer.Speak(text);
         synthesizer.SetOutputToNull();
+
+        // A API não expõe o formato nativo da voz; se não for 16 kHz mono, as posições saem escaladas
+        // e passam do fim do arquivo. Melhor falhar claramente do que medir contra uma referência errada.
+        using (var reference = new AudioFileReader(referencePath))
+        {
+            if (words.Count > 0 && words[^1].Start > reference.TotalTime)
+            {
+                throw new InvalidOperationException(
+                    $"A voz '{voice.VoiceInfo.Name}' não gera {SapiReferenceSampleRate} Hz mono nativamente: " +
+                    $"posição {words[^1].Start} além da duração {reference.TotalTime}.");
+            }
+        }
 
         ConvertToStereo44K(referencePath, outputPath);
         return new SpeechAudio(outputPath, words);

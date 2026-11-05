@@ -1,0 +1,66 @@
+using LessonsPlayer.Core.Abstractions;
+using LessonsPlayer.Core.Settings;
+using LessonsPlayer.Core.Subtitles;
+using LessonsPlayer.Presentation.Services;
+
+namespace LessonsPlayer.Presentation.Tests.Fakes;
+
+/// <summary>Executa na hora (nos testes tudo roda na mesma thread).</summary>
+internal sealed class ImmediateDispatcher : IUiDispatcher
+{
+    public void Post(Action action) => action();
+}
+
+/// <summary>Timer acionado manualmente pelo teste.</summary>
+internal sealed class ManualFrameTimer : IFrameTimer
+{
+    public event EventHandler? Tick;
+
+    public bool IsEnabled { get; set; }
+
+    public void Fire() => Tick?.Invoke(this, EventArgs.Empty);
+}
+
+/// <summary>Preferências em memória.</summary>
+internal sealed class InMemorySettingsStore : ISettingsStore
+{
+    public AppSettings Stored { get; private set; } = AppSettings.Default;
+
+    public int SaveCount { get; private set; }
+
+    public AppSettings Load() => Stored;
+
+    public void Save(AppSettings settings)
+    {
+        Stored = settings;
+        SaveCount++;
+    }
+}
+
+/// <summary>Legendas em memória, indexadas pelo caminho do áudio.</summary>
+internal sealed class InMemorySubtitleStore : ISubtitleStore
+{
+    public Dictionary<string, Transcript> Saved { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public bool FailOnSave { get; set; }
+
+    public string GetSubtitlePath(string audioFilePath) => Path.ChangeExtension(audioFilePath, ".legenda.txt");
+
+    public bool Exists(string audioFilePath) => Saved.ContainsKey(audioFilePath);
+
+    public Task<ParseResult?> LoadAsync(string audioFilePath, CancellationToken cancellationToken) =>
+        Task.FromResult(Saved.TryGetValue(audioFilePath, out var transcript)
+            ? new ParseResult(transcript, [])
+            : null);
+
+    public Task SaveAsync(string audioFilePath, Transcript transcript, CancellationToken cancellationToken)
+    {
+        if (FailOnSave)
+        {
+            throw new IOException("Disco cheio");
+        }
+
+        Saved[audioFilePath] = transcript;
+        return Task.CompletedTask;
+    }
+}

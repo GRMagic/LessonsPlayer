@@ -1,0 +1,212 @@
+<Window x:Class="LessonsPlayer.App.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:LessonsPlayer.Presentation.ViewModels;assembly=LessonsPlayer.Presentation"
+        xmlns:res="clr-namespace:LessonsPlayer.Presentation.Resources;assembly=LessonsPlayer.Presentation"
+        xmlns:views="clr-namespace:LessonsPlayer.App.Views"
+        xmlns:behaviors="clr-namespace:LessonsPlayer.App.Behaviors"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
+        Title="{Binding Title}"
+        Width="1120" Height="720" MinWidth="760" MinHeight="420"
+        WindowStartupLocation="CenterScreen"
+        AllowDrop="True">
+  <DockPanel>
+
+    <!-- ===== Barra de ferramentas ===== -->
+    <Border DockPanel.Dock="Top" Background="{StaticResource PanelBrush}"
+            BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="8,6">
+      <DockPanel LastChildFill="False">
+        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+          <Button Style="{StaticResource FlatButton}" Command="{Binding OpenFolderCommand}">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Style="{StaticResource Icon}" Text="{StaticResource GlyphFolder}" />
+              <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" Text="{x:Static res:UiText.OpenFolder}" />
+            </StackPanel>
+          </Button>
+          <Button Style="{StaticResource FlatButton}" Command="{Binding OpenFileCommand}">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Style="{StaticResource Icon}" Text="{StaticResource GlyphFile}" />
+              <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" Text="{x:Static res:UiText.OpenFile}" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+
+        <!-- Geração de legenda -->
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" DataContext="{Binding Transcription}">
+          <TextBlock Style="{StaticResource Muted}" Margin="0,0,6,0" Text="{x:Static res:UiText.Model}" />
+          <ComboBox ItemsSource="{Binding Models}" SelectedItem="{Binding SelectedModel}" MinWidth="250"
+                    IsEnabled="{Binding IsIdle}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate DataType="{x:Type vm:ModelOption}">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="{Binding Name}" />
+                  <TextBlock Margin="8,0,0,0" Style="{StaticResource Muted}" Text="{Binding SizeText}" />
+                </StackPanel>
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+
+          <TextBlock Style="{StaticResource Muted}" Margin="12,0,6,0" Text="{x:Static res:UiText.Language}" />
+          <ComboBox ItemsSource="{Binding Languages}" SelectedItem="{Binding SelectedLanguage}"
+                    DisplayMemberPath="Name" MinWidth="170" IsEnabled="{Binding IsIdle}" />
+
+          <CheckBox Margin="12,0" Content="{x:Static res:UiText.UseGpu}" IsChecked="{Binding UseGpu}"
+                    ToolTip="{x:Static res:UiText.UseGpuHint}" IsEnabled="{Binding IsIdle}" />
+
+          <Button Style="{StaticResource AccentButton}" Command="{Binding GenerateCommand}"
+                  Visibility="{Binding IsIdle, Converter={StaticResource BoolToVisibility}}">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Style="{StaticResource Icon}" Foreground="White" Text="{StaticResource GlyphSubtitle}" />
+              <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" Text="{x:Static res:UiText.GenerateSubtitle}" />
+            </StackPanel>
+          </Button>
+          <Button Style="{StaticResource FlatButton}" Command="{Binding GenerateCancelCommand}"
+                  Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}}">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Style="{StaticResource Icon}" Text="{StaticResource GlyphCancel}" />
+              <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" Text="{x:Static res:UiText.Cancel}" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- ===== Barra de status ===== -->
+    <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBrush}"
+            BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="12,3">
+      <DockPanel>
+        <ProgressBar DockPanel.Dock="Right" Width="180" Height="6" Minimum="0" Maximum="1"
+                     Value="{Binding Transcription.Progress, Mode=OneWay}"
+                     IsIndeterminate="{Binding Transcription.IsProgressIndeterminate}"
+                     Visibility="{Binding Transcription.IsRunning, Converter={StaticResource BoolToVisibility}}" />
+        <TextBlock DockPanel.Dock="Right" Margin="0,0,10,0" Style="{StaticResource Muted}"
+                   Text="{Binding Transcription.StatusText}" />
+        <TextBlock Style="{StaticResource Muted}" Text="{Binding StatusMessage}" TextTrimming="CharacterEllipsis" />
+      </DockPanel>
+    </Border>
+
+    <!-- ===== Player ===== -->
+    <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBrush}"
+            BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="10,8">
+      <Grid DataContext="{Binding Player}">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Orientation="Horizontal">
+          <Button Style="{StaticResource FlatButton}" ToolTip="{x:Static res:UiText.PreviousHint}"
+                  Command="{Binding DataContext.PreviousTrackCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}">
+            <TextBlock Style="{StaticResource Icon}" Text="{StaticResource GlyphPrevious}" />
+          </Button>
+          <Button Style="{StaticResource FlatButton}" Command="{Binding PlayPauseCommand}"
+                  ToolTip="{x:Static res:UiText.PlayPauseHint}" Padding="12,6">
+            <TextBlock FontSize="22">
+              <TextBlock.Style>
+                <Style TargetType="{x:Type TextBlock}" BasedOn="{StaticResource Icon}">
+                  <Setter Property="Text" Value="{StaticResource GlyphPlay}" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsPlaying}" Value="True">
+                      <Setter Property="Text" Value="{StaticResource GlyphPause}" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
+          </Button>
+          <Button Style="{StaticResource FlatButton}" ToolTip="{x:Static res:UiText.NextHint}"
+                  Command="{Binding DataContext.NextTrackCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}">
+            <TextBlock Style="{StaticResource Icon}" Text="{StaticResource GlyphNext}" />
+          </Button>
+        </StackPanel>
+
+        <TextBlock Grid.Column="1" Width="60" TextAlignment="Right" VerticalAlignment="Center"
+                   Text="{Binding PositionText}" />
+        <Slider Grid.Column="2" Margin="12,0" VerticalAlignment="Center" Focusable="False"
+                Minimum="0" Maximum="{Binding DurationSeconds}"
+                Value="{Binding PositionSeconds, Mode=TwoWay}"
+                IsMoveToPointEnabled="True" IsEnabled="{Binding HasMedia}"
+                behaviors:SliderScrub.IsScrubbing="{Binding IsScrubbing, Mode=TwoWay}" />
+        <TextBlock Grid.Column="3" Width="60" VerticalAlignment="Center" Style="{StaticResource Muted}"
+                   Text="{Binding DurationText}" />
+
+        <StackPanel Grid.Column="4" Orientation="Horizontal" ToolTip="{x:Static res:UiText.VolumeHint}">
+          <TextBlock Style="{StaticResource Icon}" Foreground="{StaticResource MutedTextBrush}" Text="{StaticResource GlyphVolume}" />
+          <Slider Width="100" Margin="8,0,0,0" VerticalAlignment="Center" Focusable="False"
+                  Minimum="0" Maximum="1" Value="{Binding Volume}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- ===== Conteúdo: playlist + legenda ===== -->
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="270" MinWidth="160" />
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+
+      <Border Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
+        <DockPanel DataContext="{Binding Playlist}">
+          <TextBlock DockPanel.Dock="Top" Margin="14,10,12,6" FontWeight="SemiBold"
+                     Text="{Binding FolderName}" TextTrimming="CharacterEllipsis" />
+          <Grid>
+            <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}"
+                     BorderThickness="0" Background="Transparent" Padding="4,0"
+                     HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              <ListBox.InputBindings>
+                <KeyBinding Key="Enter" CommandParameter="{Binding SelectedItem}"
+                            Command="{Binding DataContext.PlayItemCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" />
+              </ListBox.InputBindings>
+              <ListBox.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:PlaylistItemViewModel}">
+                  <Grid Background="Transparent" Margin="0,3" ToolTip="{Binding FileName}">
+                    <Grid.InputBindings>
+                      <MouseBinding Gesture="LeftDoubleClick" CommandParameter="{Binding}"
+                                    Command="{Binding DataContext.PlayItemCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" />
+                    </Grid.InputBindings>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="20" />
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource Icon}" FontSize="11" Foreground="{StaticResource AccentBrush}"
+                               Text="{StaticResource GlyphPlay}"
+                               Visibility="{Binding IsCurrent, Converter={StaticResource BoolToVisibility}}" />
+                    <TextBlock x:Name="TitleText" Grid.Column="1" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="2" Margin="6,0,4,0" Style="{StaticResource Icon}" FontSize="12"
+                               Foreground="{StaticResource MutedTextBrush}" Text="{StaticResource GlyphSubtitle}"
+                               ToolTip="{x:Static res:UiText.HasSubtitleHint}"
+                               Visibility="{Binding HasSubtitle, Converter={StaticResource BoolToVisibility}}" />
+                  </Grid>
+                  <DataTemplate.Triggers>
+                    <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                      <Setter TargetName="TitleText" Property="FontWeight" Value="SemiBold" />
+                      <Setter TargetName="TitleText" Property="Foreground" Value="{StaticResource AccentBrush}" />
+                    </DataTrigger>
+                  </DataTemplate.Triggers>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+
+            <TextBlock Margin="16" HorizontalAlignment="Center" VerticalAlignment="Center"
+                       TextAlignment="Center" TextWrapping="Wrap" Style="{StaticResource Muted}"
+                       Text="{x:Static res:UiText.PlaylistEmpty}"
+                       Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}" />
+          </Grid>
+        </DockPanel>
+      </Border>
+
+      <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                    Background="Transparent" Focusable="False" />
+
+      <views:TranscriptView Grid.Column="2" DataContext="{Binding Transcript}" />
+    </Grid>
+  </DockPanel>
+</Window>
