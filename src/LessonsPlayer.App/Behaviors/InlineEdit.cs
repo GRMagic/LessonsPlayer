@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
 
@@ -44,9 +45,18 @@ public static class InlineEdit
 
     private static void OnLostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
-        if (sender is TextBox textBox && GetCommitCommand(textBox) is { } command && command.CanExecute(textBox.DataContext))
+        // Depois de confirmar a edição, o trecho é recriado e este TextBox sai da árvore. Ao perder o foco, o
+        // DataContext dele passa a ser o sentinela "{DisconnectedItem}", que o comando tipado rejeitaria com exceção.
+        if (sender is not TextBox { DataContext: { } item } textBox
+            || ReferenceEquals(item, BindingOperations.DisconnectedSource)
+            || GetCommitCommand(textBox) is not { } command)
         {
-            command.Execute(textBox.DataContext);
+            return;
+        }
+
+        if (command.CanExecute(item))
+        {
+            command.Execute(item);
         }
     }
 }

@@ -129,6 +129,34 @@ public sealed class TranscriptViewModelTests
     }
 
     [Fact]
+    public void Clicking_another_word_commits_the_pending_inline_edit()
+    {
+        TimeSpan? requested = null;
+        _vm.SeekRequested += (_, position) => requested = position;
+        _vm.BeginEditWordCommand.Execute(WordAt(0, 0));
+        WordAt(0, 0).EditText = "Oi";
+
+        _vm.ClickWordCommand.Execute(WordAt(0, 1)); // mesmo trecho: será recriado pela confirmação
+
+        _vm.Segments[0].Model.Text.ShouldBe("Oi pessoal");
+        _vm.SelectedWord.ShouldBe(WordAt(0, 1)); // a palavra clicada, já no trecho novo
+        _vm.SelectedWord!.IsEditing.ShouldBeFalse();
+        requested.ShouldBe(Ms(400));
+    }
+
+    [Fact]
+    public void Starting_to_edit_another_word_commits_the_previous_edit()
+    {
+        _vm.BeginEditWordCommand.Execute(WordAt(0, 0));
+        WordAt(0, 0).EditText = "Oi";
+
+        _vm.BeginEditWordCommand.Execute(WordAt(1, 1));
+
+        _vm.Segments[0].Model.Text.ShouldBe("Oi pessoal");
+        WordAt(1, 1).IsEditing.ShouldBeTrue();
+    }
+
+    [Fact]
     public void Edits_reuse_view_models_of_unchanged_segments()
     {
         var untouched = _vm.Segments[1];

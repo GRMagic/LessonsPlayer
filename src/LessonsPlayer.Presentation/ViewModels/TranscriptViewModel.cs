@@ -127,6 +127,7 @@ public sealed partial class TranscriptViewModel(
     [RelayCommand]
     private void ClickWord(WordViewModel? word)
     {
+        word = CommitPendingEdit(word);
         if (word is null)
         {
             return;
@@ -137,14 +138,14 @@ public sealed partial class TranscriptViewModel(
     }
 
     [RelayCommand]
-    private void SelectWord(WordViewModel? word) => Select(word);
+    private void SelectWord(WordViewModel? word) => Select(CommitPendingEdit(word));
 
     // ----- Corrigir palavra (edição inline) -----
 
     [RelayCommand]
     private void BeginEditWord(WordViewModel? word)
     {
-        word ??= SelectedWord;
+        word = CommitPendingEdit(word ?? SelectedWord);
         if (word is null)
         {
             return;
@@ -257,6 +258,27 @@ public sealed partial class TranscriptViewModel(
     private async Task Save() => await SaveAsync();
 
     // ----- Infraestrutura interna -----
+
+    /// <summary>
+    /// Confirma a edição inline em andamento (se houver e for de outra palavra), como faria ao perder o foco.
+    /// Clicar numa palavra não tira o foco do TextBox, porque as palavras não são focáveis.
+    /// A confirmação recria o trecho editado, então a palavra alvo é reencontrada pelo modelo, que as
+    /// palavras não alteradas preservam (mesma instância de <see cref="Word"/>).
+    /// </summary>
+    private WordViewModel? CommitPendingEdit(WordViewModel? target)
+    {
+        if (SelectedWord is not { IsEditing: true } editing || ReferenceEquals(editing, target))
+        {
+            return target;
+        }
+
+        var targetModel = target?.Model;
+        CommitEditWord(editing);
+        return targetModel is null ? null : FindByModel(targetModel) ?? target;
+    }
+
+    private WordViewModel? FindByModel(Word model) =>
+        Segments.SelectMany(s => s.Words).FirstOrDefault(w => ReferenceEquals(w.Model, model));
 
     /// <summary>Aplica uma operação à palavra indicada (ou à selecionada) e mantém a seleção numa posição coerente.</summary>
     private void EditSelected(
