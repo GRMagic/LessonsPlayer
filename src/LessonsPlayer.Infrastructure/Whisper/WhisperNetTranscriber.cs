@@ -34,7 +34,8 @@ namespace LessonsPlayer.Infrastructure.Whisper;
 /// (<c>median_filter</c> no whisper.cpp do Whisper.net 1.9.1; corrigido depois no whisper.cpp) e derruba o
 /// processo. Medido em aulas TTS de 1,5 a 2,5 min (4 modelos, 3 áudios): mesmos trechos e tempos, e transcrição
 /// mais rápida em 11 de 12 casos (medium: 45 s → 22 s). Num experimento sem prompt, o abort acontecia na sobra
-/// da 3ª fatia e deixou de acontecer com a interrupção.
+/// da 3ª fatia e deixou de acontecer com a interrupção. O log nativo
+/// <c>"encoder_begin_callback returned false - aborting"</c>, de nível erro, é esperado a cada fatia.
 /// </para>
 /// </summary>
 public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable

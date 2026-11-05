@@ -100,7 +100,7 @@ App (WPF: views, serviços de UI, composition root com Generic Host + Serilog)
        └─► Core (domínio imutável, formato .txt, editor, regras puras; sem dependências externas)
 ```
 
-- **Core**: `Transcript`/`Segment`/`Word` imutáveis, `SubtitleTxtFormat`, `TranscriptEditor` (desfazer/refazer), `TextRealigner` (LCS), `WordIndex` (busca binária), `TokenWordMerger`, `SubtitleGenerator` (caso de uso) e as interfaces implementadas pela Infrastructure.
+- **Core**: `Transcript`/`Segment`/`Word` imutáveis, `SubtitleTxtFormat`, `TranscriptEditor` (desfazer/refazer), `TextRealigner` (LCS), `WordIndex` (busca binária), `TokenWordMerger`, `SentenceRegrouper`, `SubtitleGenerator` (caso de uso) e as interfaces implementadas pela Infrastructure.
 - Qualidade: `Nullable`, analisadores `latest-recommended`, *warnings as errors*, `.editorconfig` e versões centralizadas em `Directory.Packages.props`.
 
 ### Precisão
@@ -122,5 +122,7 @@ Em todas as aulas longas a transcrição foi até a última palavra, com 99–10
 
 - **`t_dtw` do whisper.cpp marca o *fim* do token**, não o início. A atribuição é deslocada em um índice em relação à implementação da OpenAI. Por isso o início de uma palavra é o `t_dtw` do token anterior (`TokenWordMerger`). Interpretado do jeito ingênuo, o erro mediano era ~250 ms.
 - **Com DTW, o whisper.cpp só entrega a primeira janela de 30 s** de cada chamada. O laço do `new_segment_callback` usa `n_segments` em vez de `result_all.size()` ([código](https://github.com/ggml-org/whisper.cpp/blob/f24588a272ae8e23280d9c220536437164e6ed28/src/whisper.cpp#L7727); issues [#2669](https://github.com/ggml-org/whisper.cpp/issues/2669) e [#3111](https://github.com/ggml-org/whisper.cpp/issues/3111)). O `WhisperNetTranscriber` processa janela a janela, retomando onde o último trecho terminou.
+- **Cada fatia processa só a primeira janela.** Depois dela, o whisper.cpp seguiria com a sobra da fatia: trabalho perdido (os trechos não são entregues) e, numa sobra de até ~150 ms, um abort nativo no filtro mediano do DTW (`WHISPER_ASSERT(filter_width < a->ne[2])`, corrigido no whisper.cpp depois da versão do Whisper.net 1.9.1). O handler de início do encoder interrompe antes da segunda janela: mesmos trechos, transcrição mais rápida (medium: 45 s → 22 s numa aula de 2,5 min).
+- **O Whisper corta frases longas em mais de um trecho**, pelos timestamps que o próprio decodificador prevê. Acontece com e sem DTW e com e sem prompt, quase sempre no meio da janela e não na fronteira das fatias. Numa aula TTS em inglês de 2,5 min, o small cortou as 15 frases. O `SentenceRegrouper` completa cada frase inacabada com as palavras seguintes até o ponto final (até 30 s, sem pausa maior que 2 s), sem mudar o tempo das palavras.
 - **Reprodução e transcrição usam o mesmo leitor (`AudioFileReader`)**. Assim o atraso inicial do MP3 e o seek em VBR não desalinham legenda e áudio. A posição exibida vem do relógio do WASAPI, ou seja, do que já saiu no alto-falante, e não do buffer.
 - Nos testes, o `AudioPosition` do System.Speech só é correto no formato nativo da voz (16 kHz mono). Isso é um bug do `AudioFileOut.Duration`, por isso o TTS é gerado nesse formato e convertido depois.
