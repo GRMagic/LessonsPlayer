@@ -73,7 +73,8 @@ public sealed class SubtitleGenerator(
             Path.GetFileName(audioFilePath), options.Model.Id, language, timeProvider.GetLocalNow());
 
         // Ordenação estável por segurança: o Transcript exige segmentos em ordem de início.
-        return new Transcript(metadata, segments.OrderBy(s => s.Start));
+        // Depois, as frases que o Whisper cortou em mais de um trecho são juntadas.
+        return new Transcript(metadata, SentenceRegrouper.Regroup(segments.OrderBy(s => s.Start)));
     }
 
     private static double Fraction(TimeSpan position, AudioSamples audio) =>

@@ -44,6 +44,22 @@ public sealed class SubtitleGeneratorTests
     }
 
     [Fact]
+    public async Task Joins_sentence_that_the_transcriber_cut_in_two_segments()
+    {
+        _transcriber.TranscribeAsync(default!, default!, TestContext.Current.CancellationToken).ReturnsForAnyArgs(Segments(
+            new RecognizedSegment(Ms(0), Ms(2000), " Repita depois de mim, prestando atenção em cada", [], "pt"),
+            new RecognizedSegment(Ms(2000), Ms(2500), " som.", [], "pt"),
+            new RecognizedSegment(Ms(3000), Ms(4000), " Muito bem.", [], "pt")));
+
+        var transcript = await _generator.GenerateAsync(
+            "a.mp3", new TranscriptionOptions(WhisperModels.Small, "pt", UseGpu: false), null,
+            TestContext.Current.CancellationToken);
+
+        transcript.Segments.Select(s => s.Text).ShouldBe(
+            ["Repita depois de mim, prestando atenção em cada som.", "Muito bem."]);
+    }
+
+    [Fact]
     public async Task Passes_model_path_and_options_to_transcriber()
     {
         _transcriber.TranscribeAsync(default!, default!, TestContext.Current.CancellationToken).ReturnsForAnyArgs(Segments());
