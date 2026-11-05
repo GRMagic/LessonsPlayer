@@ -16,10 +16,12 @@
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
         <ToggleButton Style="{StaticResource FlatButton}" IsChecked="{Binding FollowAudio}"
                       Content="{x:Static res:UiText.FollowAudio}" />
-        <Button Style="{StaticResource FlatButton}" Command="{Binding UndoCommand}" ToolTip="{x:Static res:UiText.Undo}">
+        <Button Style="{StaticResource FlatButton}" Command="{Binding UndoCommand}" ToolTip="{x:Static res:UiText.Undo}"
+                AutomationProperties.Name="{x:Static res:UiText.Undo}">
           <TextBlock Style="{StaticResource Icon}" Text="{StaticResource GlyphUndo}" />
         </Button>
-        <Button Style="{StaticResource FlatButton}" Command="{Binding RedoCommand}" ToolTip="{x:Static res:UiText.Redo}">
+        <Button Style="{StaticResource FlatButton}" Command="{Binding RedoCommand}" ToolTip="{x:Static res:UiText.Redo}"
+                AutomationProperties.Name="{x:Static res:UiText.Redo}">
           <TextBlock Style="{StaticResource Icon}" Text="{StaticResource GlyphRedo}" />
         </Button>
         <Button Style="{StaticResource FlatButton}" Command="{Binding SaveCommand}" ToolTip="Ctrl+S">

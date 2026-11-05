@@ -69,6 +69,14 @@ public sealed partial class TranscriptionViewModel : ObservableObject
     [ObservableProperty]
     private string? _statusText;
 
+    /// <summary>
+    /// Há uma geração em andamento. É um estado próprio, e não <c>GenerateCommand.IsRunning</c>: o comando só
+    /// passa a "rodando" depois que o método retorna a Task, tarde demais para notificar a UI no início.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsIdle))]
+    private bool _isRunning;
+
     public TranscriptionViewModel(
         SubtitleGenerator generator,
         ISubtitleStore subtitleStore,
@@ -100,8 +108,6 @@ public sealed partial class TranscriptionViewModel : ObservableObject
 
     public IReadOnlyList<LanguageOption> Languages { get; }
 
-    public bool IsRunning => GenerateCommand.IsRunning;
-
     public bool IsIdle => !IsRunning;
 
     private bool CanGenerate => TargetAudioFilePath is not null;
@@ -123,8 +129,7 @@ public sealed partial class TranscriptionViewModel : ObservableObject
         var options = new TranscriptionOptions(SelectedModel.Model, SelectedLanguage.Code, UseGpu);
         var progress = new Progress<TranscriptionProgress>(OnProgress); // criado na UI: os relatos voltam para ela
         var stopwatch = Stopwatch.StartNew();
-        OnPropertyChanged(nameof(IsRunning));
-        OnPropertyChanged(nameof(IsIdle));
+        IsRunning = true;
 
         try
         {
@@ -151,8 +156,7 @@ public sealed partial class TranscriptionViewModel : ObservableObject
         {
             Progress = 0;
             IsProgressIndeterminate = false;
-            OnPropertyChanged(nameof(IsRunning));
-        OnPropertyChanged(nameof(IsIdle));
+            IsRunning = false;
         }
     }
 

@@ -13,7 +13,7 @@
         Width="1120" Height="720" MinWidth="760" MinHeight="420"
         WindowStartupLocation="CenterScreen"
         AllowDrop="True">
-  <DockPanel>
+  <DockPanel Background="{StaticResource WindowBrush}">
 
     <!-- ===== Barra de ferramentas ===== -->
     <Border DockPanel.Dock="Top" Background="{StaticResource PanelBrush}"
@@ -102,11 +102,13 @@
 
         <StackPanel Orientation="Horizontal">
           <Button Style="{StaticResource FlatButton}" ToolTip="{x:Static res:UiText.PreviousHint}"
+                  AutomationProperties.Name="{x:Static res:UiText.PreviousHint}"
                   Command="{Binding DataContext.PreviousTrackCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}">
             <TextBlock Style="{StaticResource Icon}" Text="{StaticResource GlyphPrevious}" />
           </Button>
           <Button Style="{StaticResource FlatButton}" Command="{Binding PlayPauseCommand}"
-                  ToolTip="{x:Static res:UiText.PlayPauseHint}" Padding="12,6">
+                  ToolTip="{x:Static res:UiText.PlayPauseHint}" Padding="12,6"
+                  AutomationProperties.Name="{x:Static res:UiText.PlayPauseHint}">
             <TextBlock FontSize="22">
               <TextBlock.Style>
                 <Style TargetType="{x:Type TextBlock}" BasedOn="{StaticResource Icon}">
@@ -121,6 +123,7 @@
             </TextBlock>
           </Button>
           <Button Style="{StaticResource FlatButton}" ToolTip="{x:Static res:UiText.NextHint}"
+                  AutomationProperties.Name="{x:Static res:UiText.NextHint}"
                   Command="{Binding DataContext.NextTrackCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}">
             <TextBlock Style="{StaticResource Icon}" Text="{StaticResource GlyphNext}" />
           </Button>
@@ -128,7 +131,7 @@
 
         <TextBlock Grid.Column="1" Width="60" TextAlignment="Right" VerticalAlignment="Center"
                    Text="{Binding PositionText}" />
-        <Slider Grid.Column="2" Margin="12,0" VerticalAlignment="Center" Focusable="False"
+        <Slider Grid.Column="2" Margin="12,0" AutomationProperties.Name="Posição" VerticalAlignment="Center" Focusable="False"
                 Minimum="0" Maximum="{Binding DurationSeconds}"
                 Value="{Binding PositionSeconds, Mode=TwoWay}"
                 IsMoveToPointEnabled="True" IsEnabled="{Binding HasMedia}"

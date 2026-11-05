@@ -32,15 +32,23 @@ public sealed class TimestampPrecisionTests : IDisposable
         "First, listen carefully to each sentence. Then repeat it slowly, paying attention " +
         "to the pronunciation of every single word.";
 
+    /// <summary>~80 s de fala: atravessa três janelas de 30 s do Whisper.</summary>
+    private const string LongPortugueseText =
+        "Bom dia a todos e sejam bem-vindos ao curso de inglês. Hoje vamos falar sobre os verbos irregulares mais comuns. " +
+        "O verbo ir, em inglês, é go, e no passado se torna went. O verbo ter é have, e no passado vira had. " +
+        "Vamos praticar a pronúncia com calma, sem pressa. Repita depois de mim, prestando atenção em cada som. " +
+        "Agora vamos ouvir um pequeno diálogo entre dois amigos. Eles conversam sobre o que fizeram no fim de semana. " +
+        "Um deles foi à praia, e o outro ficou em casa estudando para a prova. " +
+        "Anote as palavras novas no seu caderno de vocabulário e revise antes de dormir. " +
+        "Na próxima aula, vamos revisar tudo o que vimos hoje e fazer alguns exercícios. " +
+        "Obrigado pela atenção e até a próxima aula.";
+
     private readonly string _workDirectory = Directory.CreateTempSubdirectory("lessonsplayer-tests-").FullName;
 
     public static TheoryData<string, string, string> Cases()
     {
-        var models = (Environment.GetEnvironmentVariable(ModelsVariable) ?? "base-q5_1,small-q5_1")
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
         var data = new TheoryData<string, string, string>();
-        foreach (var model in models)
+        foreach (var model in Models())
         {
             data.Add("pt-BR", "pt", model);
             data.Add("en-US", "en", model);
@@ -49,22 +57,51 @@ public sealed class TimestampPrecisionTests : IDisposable
         return data;
     }
 
+    public static TheoryData<string> ModelCases() => [.. Models()];
+
     public void Dispose() => Directory.Delete(_workDirectory, recursive: true);
 
     [Theory]
     [MemberData(nameof(Cases))]
     public async Task Word_start_times_match_spoken_audio(string culture, string language, string modelId)
     {
-        var ct = TestContext.Current.CancellationToken;
         var text = culture.StartsWith("pt", StringComparison.Ordinal) ? PortugueseText : EnglishText;
-        var audio = SpeechAudio.TrySynthesize(text, culture, Path.Combine(_workDirectory, $"{culture}.wav"));
+
+        var result = await MeasureAsync(text, culture, language, modelId);
+
+        result.MatchRatio.ShouldBeGreaterThan(0.8, "o reconhecimento deveria acertar a maioria das palavras");
+        // Medido em 2026-11: mediana ~40–80 ms e p90 ~130–250 ms (base, small, medium e large-v3-turbo).
+        result.Median.ShouldBeLessThan(100, "erro mediano de início de palavra");
+        result.P90.ShouldBeLessThan(250, "90% das palavras dentro de 250 ms");
+    }
+
+    [Theory]
+    [MemberData(nameof(ModelCases))]
+    public async Task Long_audio_is_transcribed_to_the_end_with_precise_timestamps(string modelId)
+    {
+        var result = await MeasureAsync(LongPortugueseText, "pt-BR", "pt", modelId);
+
+        // Antes do processamento janela a janela, o DTW parava depois dos primeiros 30 s.
+        result.LastRecognizedStart.ShouldBeGreaterThan(result.LastSpokenStart - TimeSpan.FromSeconds(2), "transcreveu até o fim");
+        result.MatchRatio.ShouldBeGreaterThan(0.8);
+        result.Median.ShouldBeLessThan(100);
+        result.P90.ShouldBeLessThan(250);
+    }
+
+    private static string[] Models() =>
+        (Environment.GetEnvironmentVariable(ModelsVariable) ?? "base-q5_1,small-q5_1")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private async Task<Measurement> MeasureAsync(string text, string culture, string language, string modelId)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var audio = SpeechAudio.TrySynthesize(text, culture, Path.Combine(_workDirectory, $"{culture}-{text.Length}.wav"));
         if (audio is null)
         {
             Assert.Skip($"Nenhuma voz TTS instalada para {culture}.");
         }
 
         var transcript = await TranscribeAsync(audio.FilePath, WhisperModels.FindOrDefault(modelId), language, ct);
-
         var recognized = transcript.Segments.SelectMany(s => s.Words).ToList();
         var matches = WordAlignment.Match([.. audio.Words.Select(w => w.Text)], [.. recognized.Select(w => w.Text)]);
         var errors = matches
@@ -72,21 +109,19 @@ public sealed class TimestampPrecisionTests : IDisposable
             .Order()
             .ToArray();
 
+        var result = new Measurement(
+            (double)matches.Count / audio.Words.Count,
+            Percentile(errors, 0.5),
+            Percentile(errors, 0.9),
+            recognized.Count > 0 ? recognized[^1].Start : TimeSpan.Zero,
+            audio.Words[^1].Start);
+
         var output = TestContext.Current.TestOutputHelper!;
         output.WriteLine($"Modelo {modelId}, {culture}: {matches.Count}/{audio.Words.Count} palavras casadas");
         output.WriteLine(string.Create(CultureInfo.InvariantCulture,
-            $"Erro de início (ms): mediana {Percentile(errors, 0.5):F0}, p90 {Percentile(errors, 0.9):F0}, máx {errors[^1]:F0}"));
-        foreach (var (expected, actual) in matches)
-        {
-            output.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                $"  {audio.Words[expected].Text,-14} real {audio.Words[expected].Start.TotalSeconds,7:F2}s  " +
-                $"whisper {recognized[actual].Start.TotalSeconds,7:F2}s"));
-        }
-
-        ((double)matches.Count / audio.Words.Count).ShouldBeGreaterThan(0.8, "o reconhecimento deveria acertar a maioria das palavras");
-        // Medido em 2026-11: mediana ~40–50 ms e p90 ~130–150 ms (base e small, pt e en).
-        Percentile(errors, 0.5).ShouldBeLessThan(100, "erro mediano de início de palavra");
-        Percentile(errors, 0.9).ShouldBeLessThan(250, "90% das palavras dentro de 250 ms");
+            $"Erro de início (ms): mediana {result.Median:F0}, p90 {result.P90:F0}, máx {(errors.Length > 0 ? errors[^1] : 0):F0}; " +
+            $"última palavra: real {result.LastSpokenStart.TotalSeconds:F1}s, whisper {result.LastRecognizedStart.TotalSeconds:F1}s"));
+        return result;
     }
 
     private static async Task<Transcript> TranscribeAsync(
@@ -104,4 +139,7 @@ public sealed class TimestampPrecisionTests : IDisposable
 
     private static double Percentile(double[] sorted, double p) =>
         sorted.Length == 0 ? double.NaN : sorted[(int)Math.Clamp(Math.Ceiling(p * sorted.Length) - 1, 0, sorted.Length - 1)];
+
+    private sealed record Measurement(
+        double MatchRatio, double Median, double P90, TimeSpan LastRecognizedStart, TimeSpan LastSpokenStart);
 }

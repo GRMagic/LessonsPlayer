@@ -28,6 +28,9 @@ public partial class MainWindow : Window
         PreviewTextInput += (_, e) => KeyboardShortcuts.HandleText(e, _viewModel);
         DragOver += OnDragOver;
         Drop += OnDrop;
+#if DEBUG
+        Diagnostics.DebugSnapshots.AttachIfRequested(this);
+#endif
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
