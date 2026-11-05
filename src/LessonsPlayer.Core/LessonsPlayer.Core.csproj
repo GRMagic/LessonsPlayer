@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Domínio e regras puras: sem dependências de UI, áudio ou Whisper. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>LessonsPlayer.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="LessonsPlayer.Core.Tests" />
+  </ItemGroup>
+</Project>

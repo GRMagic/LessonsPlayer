@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LessonsPlayer.App/LessonsPlayer.App.csproj" />
+    <Project Path="src/LessonsPlayer.Core/LessonsPlayer.Core.csproj" />
+    <Project Path="src/LessonsPlayer.Infrastructure/LessonsPlayer.Infrastructure.csproj" />
+    <Project Path="src/LessonsPlayer.Presentation/LessonsPlayer.Presentation.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LessonsPlayer.Core.Tests/LessonsPlayer.Core.Tests.csproj" />
+    <Project Path="tests/LessonsPlayer.Integration.Tests/LessonsPlayer.Integration.Tests.csproj" />
+    <Project Path="tests/LessonsPlayer.Presentation.Tests/LessonsPlayer.Presentation.Tests.csproj" />
+  </Folder>
+</Solution>
