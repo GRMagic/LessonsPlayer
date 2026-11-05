@@ -12,18 +12,24 @@ namespace LessonsPlayer.Infrastructure.Audio;
 /// (<see cref="IWavePosition.GetPosition"/>) a partir da posição do último seek. A posição de leitura do
 /// arquivo fica adiantada pelo tamanho do buffer e deixaria o karaokê antecipado.
 /// </para>
+/// <para>
+/// Threads: os métodos públicos devem ser chamados de uma única thread (a da UI). O evento
+/// <c>PlaybackStopped</c> do NAudio chega pela thread de reprodução, às vezes de forma síncrona dentro
+/// de <c>Stop()</c>. Por isso o handler não usa locks (um lock causaria deadlock com o <c>Stop()</c>
+/// do seek) e só lê estado que é seguro observar de outra thread.
+/// </para>
 /// </summary>
 public sealed partial class NAudioPlayer(ILogger<NAudioPlayer> logger) : IAudioPlayer
 {
     private const int LatencyMilliseconds = 80;
 
-    private readonly Lock _sync = new();
     private AudioFileReader? _reader;
     private WasapiPlayer? _output;
-    private TimeSpan _origin;      // posição do arquivo onde o relógio do dispositivo começou a contar
-    private bool _reachedEnd;
+    private TimeSpan _origin;            // posição do arquivo onde o relógio do dispositivo começou a contar
+    private volatile bool _reachedEnd;
+    private volatile bool _isRepositioning; // Stop() feito pelo próprio seek: o PlaybackStopped resultante não é "fim"
     private float _volume = 1f;
-    private PlaybackState _state = PlaybackState.Stopped;
+    private volatile PlaybackState _state = PlaybackState.Stopped;
 
     public event EventHandler? StateChanged;
 
@@ -41,24 +47,21 @@ public sealed partial class NAudioPlayer(ILogger<NAudioPlayer> logger) : IAudioP
     {
         get
         {
-            lock (_sync)
+            if (_reader is not { } reader || _output is not { } output)
             {
-                if (_reader is null || _output is null)
-                {
-                    return TimeSpan.Zero;
-                }
-
-                if (_reachedEnd)
-                {
-                    return _reader.TotalTime;
-                }
-
-                var bytesPerSecond = _output.OutputWaveFormat.AverageBytesPerSecond;
-                var played = bytesPerSecond > 0
-                    ? TimeSpan.FromSeconds((double)_output.GetPosition() / bytesPerSecond)
-                    : TimeSpan.Zero;
-                return Clamp(_origin + played, TimeSpan.Zero, _reader.TotalTime);
+                return TimeSpan.Zero;
             }
+
+            if (_reachedEnd)
+            {
+                return reader.TotalTime;
+            }
+
+            var bytesPerSecond = output.OutputWaveFormat.AverageBytesPerSecond;
+            var played = bytesPerSecond > 0
+                ? TimeSpan.FromSeconds((double)output.GetPosition() / bytesPerSecond)
+                : TimeSpan.Zero;
+            return Clamp(_origin + played, TimeSpan.Zero, reader.TotalTime);
         }
     }
 
@@ -68,13 +71,7 @@ public sealed partial class NAudioPlayer(ILogger<NAudioPlayer> logger) : IAudioP
         set
         {
             _volume = Math.Clamp(value, 0f, 1f);
-            lock (_sync)
-            {
-                if (_reader is not null)
-                {
-                    _reader.Volume = _volume;
-                }
-            }
+            _reader?.Volume = _volume;
         }
     }
 
@@ -83,33 +80,32 @@ public sealed partial class NAudioPlayer(ILogger<NAudioPlayer> logger) : IAudioP
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         Close();
 
-        var reader = new AudioFileReader(filePath) { Volume = _volume };
-        var output = new WasapiPlayerBuilder()
-            .WithSharedMode()
-            .WithEventSync()
-            .WithLatency(LatencyMilliseconds)
-            .WithDefaultDeviceStreamRouting() // acompanha a troca do dispositivo padrão (ex.: fone conectado)
-            .Build();
+        AudioFileReader? reader = null;
+        WasapiPlayer? output = null;
         try
         {
+            reader = new AudioFileReader(filePath) { Volume = _volume };
+            output = new WasapiPlayerBuilder()
+                .WithSharedMode()
+                .WithEventSync()
+                .WithLatency(LatencyMilliseconds)
+                .Build();
             output.Init(reader);
         }
         catch
         {
-            output.Dispose();
-            reader.Dispose();
+            // Sem isso o arquivo ficaria travado até o GC.
+            output?.Dispose();
+            reader?.Dispose();
             throw;
         }
 
         output.PlaybackStopped += OnPlaybackStopped;
-        lock (_sync)
-        {
-            _reader = reader;
-            _output = output;
-            _origin = TimeSpan.Zero;
-            _reachedEnd = false;
-            CurrentFile = filePath;
-        }
+        _reader = reader;
+        _output = output;
+        _origin = TimeSpan.Zero;
+        _reachedEnd = false;
+        CurrentFile = filePath;
 
         LogOpened(logger, filePath, reader.TotalTime);
         SetState(PlaybackState.Stopped);
@@ -117,15 +113,10 @@ public sealed partial class NAudioPlayer(ILogger<NAudioPlayer> logger) : IAudioP
 
     public void Close()
     {
-        WasapiPlayer? output;
-        AudioFileReader? reader;
-        lock (_sync)
-        {
-            (output, reader) = (_output, _reader);
-            (_output, _reader) = (null, null);
-            CurrentFile = null;
-            _reachedEnd = false;
-        }
+        var (output, reader) = (_output, _reader);
+        (_output, _reader) = (null, null);
+        CurrentFile = null;
+        _reachedEnd = false;
 
         if (output is not null)
         {
@@ -139,67 +130,64 @@ public sealed partial class NAudioPlayer(ILogger<NAudioPlayer> logger) : IAudioP
 
     public void Play()
     {
-        lock (_sync)
+        if (_reader is not { } reader || _output is not { } output)
         {
-            if (_reader is null || _output is null)
-            {
-                return;
-            }
-
-            if (_reachedEnd)
-            {
-                // Tocar de novo depois do fim recomeça do início.
-                _reader.Position = 0;
-                _origin = TimeSpan.Zero;
-                _reachedEnd = false;
-            }
-
-            _output.Play();
+            return;
         }
 
+        if (_reachedEnd)
+        {
+            // Tocar de novo depois do fim recomeça do início.
+            reader.Position = 0;
+            _origin = TimeSpan.Zero;
+            _reachedEnd = false;
+        }
+
+        output.Play();
         SetState(PlaybackState.Playing);
     }
 
     public void Pause()
     {
-        lock (_sync)
+        if (_output is not { } output || _state != PlaybackState.Playing)
         {
-            if (_output is null || _state != PlaybackState.Playing)
-            {
-                return;
-            }
-
-            _output.Pause();
+            return;
         }
 
+        output.Pause();
         SetState(PlaybackState.Paused);
     }
 
     public void Seek(TimeSpan position)
     {
-        lock (_sync)
+        if (_reader is not { } reader || _output is not { } output)
         {
-            if (_reader is null || _output is null)
+            return;
+        }
+
+        var resume = _state == PlaybackState.Playing;
+
+        // Stop descarta o buffer do dispositivo e zera o relógio: a nova origem passa a valer imediatamente.
+        _isRepositioning = true;
+        try
+        {
+            if (output.PlaybackState != NAudio.Wave.PlaybackState.Stopped)
             {
-                return;
+                output.Stop();
             }
 
-            var resume = _state == PlaybackState.Playing;
-
-            // Stop descarta o buffer do dispositivo e zera o relógio: a nova origem passa a valer imediatamente.
-            if (_output.PlaybackState != NAudio.Wave.PlaybackState.Stopped)
-            {
-                _output.Stop();
-            }
-
-            _reader.CurrentTime = Clamp(position, TimeSpan.Zero, _reader.TotalTime);
-            _origin = _reader.CurrentTime;
+            reader.CurrentTime = Clamp(position, TimeSpan.Zero, reader.TotalTime);
+            _origin = reader.CurrentTime;
             _reachedEnd = false;
+        }
+        finally
+        {
+            _isRepositioning = false;
+        }
 
-            if (resume)
-            {
-                _output.Play();
-            }
+        if (resume)
+        {
+            output.Play();
         }
     }
 
@@ -207,6 +195,11 @@ public sealed partial class NAudioPlayer(ILogger<NAudioPlayer> logger) : IAudioP
 
     private void OnPlaybackStopped(object? sender, StoppedEventArgs e)
     {
+        if (!ReferenceEquals(sender, _output))
+        {
+            return; // evento atrasado de um arquivo anterior
+        }
+
         if (e.Exception is not null)
         {
             LogPlaybackFailed(logger, e.Exception, CurrentFile);
@@ -215,26 +208,15 @@ public sealed partial class NAudioPlayer(ILogger<NAudioPlayer> logger) : IAudioP
             return;
         }
 
-        bool completed;
-        lock (_sync)
+        // Também chega aqui depois do Stop() de um seek; só é "fim" se o arquivo foi lido até o final.
+        if (_isRepositioning || _reader is not { } reader || reader.Position < reader.Length)
         {
-            // Também chega aqui depois de um Stop feito pelo Seek; só é "fim" se o arquivo foi lido até o final.
-            completed = sender is WasapiPlayer output
-                && ReferenceEquals(output, _output)
-                && _reader is not null
-                && output.PlaybackState == NAudio.Wave.PlaybackState.Stopped
-                && _reader.Position >= _reader.Length;
-            if (completed)
-            {
-                _reachedEnd = true;
-            }
+            return;
         }
 
-        if (completed)
-        {
-            SetState(PlaybackState.Stopped);
-            PlaybackCompleted?.Invoke(this, EventArgs.Empty);
-        }
+        _reachedEnd = true;
+        SetState(PlaybackState.Stopped);
+        PlaybackCompleted?.Invoke(this, EventArgs.Empty);
     }
 
     private void SetState(PlaybackState state)
