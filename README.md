@@ -36,8 +36,9 @@ O botão direito numa palavra abre todas as opções de edição. Ao editar uma 
 | Tiny / Base | 32 / 60 MB | Máquinas lentas, áudio limpo |
 | **Small** (padrão) | 190 MB | Bom equilíbrio |
 | Medium / Large v3 Turbo | 540 / 575 MB | Áudio difícil (ruído, sotaque); mais lentos sem GPU |
+| Base.en / Small.en / Medium.en | 60 / 190 / 540 MB | Só inglês (o idioma fica fixo em inglês) |
 
-A precisão do **tempo** das palavras é parecida em todos (veja [Precisão](#precisão)). Modelos maiores ajudam no **texto**.
+A precisão do **tempo** das palavras é parecida em todos (veja [Precisão](#precisão)); o base.en é o único que fica um pouco atrás. Modelos maiores ajudam no **texto** em áudio difícil.
 
 ## Formato da legenda
 
@@ -104,14 +105,18 @@ App (WPF: views, serviços de UI, composition root com Generic Host + Serilog)
 
 ### Precisão
 
-Medida pelo teste `TimestampPrecisionTests`, que compara com o instante real de cada palavra em áudio sintetizado. Erro no **início** da palavra:
+Medida pelo teste `TimestampPrecisionTests`, que compara com o instante real de cada palavra em áudio sintetizado (WAV e MP3). Erro no **início** da palavra, mediana / p90:
 
-| Modelo | pt-BR (mediana / p90) | en-US (mediana / p90) |
-|---|---|---|
-| base | 41 / 130 ms | 50 / 220 ms |
-| small | 38 / 149 ms | 50 / 130 ms |
-| medium | 82 / 248 ms | 70 / 165 ms |
-| large-v3-turbo | 52 / 136 ms | 60 / 160 ms |
+| Modelo | pt-BR WAV | pt-BR MP3 | en-US WAV | en-US MP3 | Aula longa en-US MP3 (53 s) |
+|---|---|---|---|---|---|
+| base | 41 / 130 ms | 32 / 123 ms | 50 / 220 ms | 35 / 115 ms | 45 / 125 ms |
+| base.en | — | — | 95 / 245 ms | 75 / 240 ms | 80 / 210 ms |
+| small | 38 / 149 ms | 41 / 129 ms | 50 / 130 ms | 35 / 130 ms | 30 / 140 ms |
+| small.en | — | — | 45 / 145 ms | 40 / 125 ms | 45 / 125 ms |
+| medium.en | — | — | 35 / 110 ms | 40 / 115 ms | 45 / 130 ms |
+| large-v3-turbo | 52 / 136 ms | 43 / 136 ms | 60 / 160 ms | 40 / 145 ms | 40 / 165 ms |
+
+Em todas as aulas longas a transcrição foi até a última palavra, com 99–100% das palavras corretas em inglês.
 
 ### Notas técnicas (descobertas com evidência)
 

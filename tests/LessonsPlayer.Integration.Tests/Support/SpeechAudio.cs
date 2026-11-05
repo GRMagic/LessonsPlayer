@@ -9,6 +9,13 @@ namespace LessonsPlayer.Integration.Tests.Support;
 /// <summary>Palavra falada pelo TTS e o instante exato em que começa no arquivo gerado (ground truth).</summary>
 internal sealed record SpokenWord(string Text, TimeSpan Start);
 
+/// <summary>Formato do arquivo de teste gerado.</summary>
+public enum TestAudioFormat
+{
+    Wav,
+    Mp3,
+}
+
 /// <summary>Áudio sintetizado com as vozes do Windows (SAPI), com o tempo real de cada palavra.</summary>
 internal sealed record SpeechAudio(string FilePath, IReadOnlyList<SpokenWord> Words)
 {
@@ -23,10 +30,12 @@ internal sealed record SpeechAudio(string FilePath, IReadOnlyList<SpokenWord> Wo
     private const int SapiReferenceSampleRate = 16_000;
 
     /// <summary>
-    /// Gera um WAV 44,1 kHz estéreo (para exercitar downmix e resample do decodificador);
-    /// retorna <c>null</c> se não houver voz instalada para o idioma.
+    /// Gera o áudio em 44,1 kHz estéreo, em WAV ou MP3 (pelo codificador do Media Foundation do Windows),
+    /// para exercitar downmix, resample e decodificação de MP3. Retorna <c>null</c> se não houver voz
+    /// instalada para o idioma.
     /// </summary>
-    public static SpeechAudio? TrySynthesize(string text, string cultureName, string outputPath)
+    public static SpeechAudio? TrySynthesize(
+        string text, string cultureName, string outputPathWithoutExtension, TestAudioFormat format = TestAudioFormat.Wav)
     {
         using var synthesizer = new SpeechSynthesizer();
         var voice = synthesizer.GetInstalledVoices(new CultureInfo(cultureName)).FirstOrDefault(v => v.Enabled);
@@ -35,7 +44,7 @@ internal sealed record SpeechAudio(string FilePath, IReadOnlyList<SpokenWord> Wo
             return null;
         }
 
-        var referencePath = Path.ChangeExtension(outputPath, ".16k.wav");
+        var referencePath = outputPathWithoutExtension + ".16k.wav";
         synthesizer.SelectVoice(voice.VoiceInfo.Name);
         synthesizer.SetOutputToWaveFile(
             referencePath,
@@ -60,14 +69,22 @@ internal sealed record SpeechAudio(string FilePath, IReadOnlyList<SpokenWord> Wo
             }
         }
 
-        ConvertToStereo44K(referencePath, outputPath);
+        var outputPath = outputPathWithoutExtension + (format == TestAudioFormat.Mp3 ? ".mp3" : ".wav");
+        ConvertToStereo44K(referencePath, outputPath, format);
         return new SpeechAudio(outputPath, words);
     }
 
-    private static void ConvertToStereo44K(string sourcePath, string targetPath)
+    private static void ConvertToStereo44K(string sourcePath, string targetPath, TestAudioFormat format)
     {
         using var reader = new AudioFileReader(sourcePath);
         var stereo = new MonoToStereoSampleProvider(new WdlResamplingSampleProvider(reader, 44_100));
-        WaveFileWriter.CreateWaveFile16(targetPath, stereo);
+        if (format == TestAudioFormat.Mp3)
+        {
+            MediaFoundationEncoder.EncodeToMp3(new SampleToWaveProvider16(stereo), targetPath, 128_000);
+        }
+        else
+        {
+            WaveFileWriter.CreateWaveFile16(targetPath, stereo);
+        }
     }
 }

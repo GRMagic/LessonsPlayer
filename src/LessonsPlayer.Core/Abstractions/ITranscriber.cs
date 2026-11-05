@@ -4,7 +4,13 @@ using LessonsPlayer.Core.Transcription;
 namespace LessonsPlayer.Core.Abstractions;
 
 /// <summary>Parâmetros do motor de transcrição.</summary>
-public sealed record TranscriberSettings(string ModelPath, WhisperModelSize ModelSize, string Language, bool UseGpu);
+/// <param name="ModelPath">Arquivo do modelo ggml.</param>
+/// <param name="ModelSize">Arquitetura do modelo.</param>
+/// <param name="Language">Código do idioma ou <c>auto</c>.</param>
+/// <param name="UseGpu">Tentar usar a GPU (cai para a CPU se não houver).</param>
+/// <param name="EnglishOnly">Modelo <c>.en</c> (muda as cabeças de alinhamento do DTW).</param>
+public sealed record TranscriberSettings(
+    string ModelPath, WhisperModelSize ModelSize, string Language, bool UseGpu, bool EnglishOnly = false);
 
 /// <summary>Motor de reconhecimento de fala.</summary>
 public interface ITranscriber

@@ -27,6 +27,8 @@ public sealed class SubtitleGenerator(
     ITranscriber transcriber,
     TimeProvider timeProvider)
 {
+    private const string EnglishLanguage = "en";
+
     public async Task<Transcript> GenerateAsync(
         string audioFilePath,
         TranscriptionOptions options,
@@ -46,7 +48,10 @@ public sealed class SubtitleGenerator(
         var audio = await audioDecoder.DecodeForSpeechAsync(audioFilePath, cancellationToken);
 
         progress?.Report(new TranscriptionProgress(TranscriptionStage.Transcribing, 0));
-        var settings = new TranscriberSettings(modelPath, options.Model.Size, options.Language, options.UseGpu);
+        // Modelos .en só transcrevem inglês: detectar idioma ou pedir outro não faz sentido.
+        var requestedLanguage = options.Model.EnglishOnly ? EnglishLanguage : options.Language;
+        var settings = new TranscriberSettings(
+            modelPath, options.Model.Size, requestedLanguage, options.UseGpu, options.Model.EnglishOnly);
         var segments = new List<Segment>();
         string? detectedLanguage = null;
 
@@ -63,7 +68,7 @@ public sealed class SubtitleGenerator(
 
         progress?.Report(new TranscriptionProgress(TranscriptionStage.Transcribing, 1));
 
-        var language = options.Language == TranscriptionLanguages.Auto ? detectedLanguage : options.Language;
+        var language = requestedLanguage == TranscriptionLanguages.Auto ? detectedLanguage : requestedLanguage;
         var metadata = new TranscriptMetadata(
             Path.GetFileName(audioFilePath), options.Model.Id, language, timeProvider.GetLocalNow());
 

@@ -43,31 +43,65 @@ public sealed class TimestampPrecisionTests : IDisposable
         "Na próxima aula, vamos revisar tudo o que vimos hoje e fazer alguns exercícios. " +
         "Obrigado pela atenção e até a próxima aula.";
 
+    /// <summary>~80 s de aula em inglês (o caso principal do app), com frases longas e enumerações.</summary>
+    private const string LongEnglishText =
+        "Welcome back, everyone. In today's lesson we are going to review the most common irregular verbs in English. " +
+        "Let's start with a few examples: go, went, gone; have, had, had; and take, took, taken. " +
+        "Notice that the past simple and the past participle are sometimes the same, but very often they are different. " +
+        "Now, listen to this short dialogue between two friends who are talking about their weekend. " +
+        "One of them went to the beach with his family, while the other stayed at home and studied for an important exam. " +
+        "Pay close attention to the pronunciation of each verb, especially the ones that end with a consonant sound. " +
+        "Before the next class, please write ten sentences using the verbs we practiced today, " +
+        "and remember to read them out loud at least twice. Thank you for your attention, and see you next time.";
+
     private readonly string _workDirectory = Directory.CreateTempSubdirectory("lessonsplayer-tests-").FullName;
 
-    public static TheoryData<string, string, string> Cases()
+    /// <summary>Português e inglês, em WAV e MP3 (o formato mais comum das aulas). Modelos .en só em inglês.</summary>
+    public static TheoryData<string, string, string, TestAudioFormat> Cases()
     {
-        var data = new TheoryData<string, string, string>();
+        var data = new TheoryData<string, string, string, TestAudioFormat>();
         foreach (var model in Models())
         {
-            data.Add("pt-BR", "pt", model);
-            data.Add("en-US", "en", model);
+            foreach (var format in new[] { TestAudioFormat.Wav, TestAudioFormat.Mp3 })
+            {
+                if (!WhisperModels.FindOrDefault(model).EnglishOnly)
+                {
+                    data.Add("pt-BR", "pt", model, format);
+                }
+
+                data.Add("en-US", "en", model, format);
+            }
         }
 
         return data;
     }
 
-    public static TheoryData<string> ModelCases() => [.. Models()];
+    /// <summary>Áudio longo em MP3: inglês sempre, português só para modelos multilíngues.</summary>
+    public static TheoryData<string, string, string> LongCases()
+    {
+        var data = new TheoryData<string, string, string>();
+        foreach (var model in Models())
+        {
+            data.Add("en-US", "en", model);
+            if (!WhisperModels.FindOrDefault(model).EnglishOnly)
+            {
+                data.Add("pt-BR", "pt", model);
+            }
+        }
+
+        return data;
+    }
 
     public void Dispose() => Directory.Delete(_workDirectory, recursive: true);
 
     [Theory]
     [MemberData(nameof(Cases))]
-    public async Task Word_start_times_match_spoken_audio(string culture, string language, string modelId)
+    public async Task Word_start_times_match_spoken_audio(
+        string culture, string language, string modelId, TestAudioFormat format)
     {
         var text = culture.StartsWith("pt", StringComparison.Ordinal) ? PortugueseText : EnglishText;
 
-        var result = await MeasureAsync(text, culture, language, modelId);
+        var result = await MeasureAsync(text, culture, language, modelId, format);
 
         result.MatchRatio.ShouldBeGreaterThan(0.8, "o reconhecimento deveria acertar a maioria das palavras");
         // Medido em 2026-11: mediana ~40–80 ms e p90 ~130–250 ms (base, small, medium e large-v3-turbo).
@@ -76,10 +110,12 @@ public sealed class TimestampPrecisionTests : IDisposable
     }
 
     [Theory]
-    [MemberData(nameof(ModelCases))]
-    public async Task Long_audio_is_transcribed_to_the_end_with_precise_timestamps(string modelId)
+    [MemberData(nameof(LongCases))]
+    public async Task Long_audio_is_transcribed_to_the_end_with_precise_timestamps(string culture, string language, string modelId)
     {
-        var result = await MeasureAsync(LongPortugueseText, "pt-BR", "pt", modelId);
+        var text = culture.StartsWith("pt", StringComparison.Ordinal) ? LongPortugueseText : LongEnglishText;
+
+        var result = await MeasureAsync(text, culture, language, modelId, TestAudioFormat.Mp3);
 
         // Antes do processamento janela a janela, o DTW parava depois dos primeiros 30 s.
         result.LastRecognizedStart.ShouldBeGreaterThan(result.LastSpokenStart - TimeSpan.FromSeconds(2), "transcreveu até o fim");
@@ -92,10 +128,11 @@ public sealed class TimestampPrecisionTests : IDisposable
         (Environment.GetEnvironmentVariable(ModelsVariable) ?? "base-q5_1,small-q5_1")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-    private async Task<Measurement> MeasureAsync(string text, string culture, string language, string modelId)
+    private async Task<Measurement> MeasureAsync(
+        string text, string culture, string language, string modelId, TestAudioFormat format)
     {
         var ct = TestContext.Current.CancellationToken;
-        var audio = SpeechAudio.TrySynthesize(text, culture, Path.Combine(_workDirectory, $"{culture}-{text.Length}.wav"));
+        var audio = SpeechAudio.TrySynthesize(text, culture, Path.Combine(_workDirectory, $"{culture}-{text.Length}"), format);
         if (audio is null)
         {
             Assert.Skip($"Nenhuma voz TTS instalada para {culture}.");
@@ -117,7 +154,7 @@ public sealed class TimestampPrecisionTests : IDisposable
             audio.Words[^1].Start);
 
         var output = TestContext.Current.TestOutputHelper!;
-        output.WriteLine($"Modelo {modelId}, {culture}: {matches.Count}/{audio.Words.Count} palavras casadas");
+        output.WriteLine($"Modelo {modelId}, {culture}, {format}: {matches.Count}/{audio.Words.Count} palavras casadas");
         output.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"Erro de início (ms): mediana {result.Median:F0}, p90 {result.P90:F0}, máx {(errors.Length > 0 ? errors[^1] : 0):F0}; " +
             $"última palavra: real {result.LastSpokenStart.TotalSeconds:F1}s, whisper {result.LastRecognizedStart.TotalSeconds:F1}s"));

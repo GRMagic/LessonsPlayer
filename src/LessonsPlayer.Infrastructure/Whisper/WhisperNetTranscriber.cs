@@ -151,17 +151,22 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
         {
             UseGpu = useGpu,
             UseDtwTimeStamps = true,
-            HeadsPreset = ToHeadsPreset(settings.ModelSize),
+            HeadsPreset = ToHeadsPreset(settings.ModelSize, settings.EnglishOnly),
             UseFlashAttention = false, // o DTW exige flash attention desligado
         });
 
-    private static WhisperAlignmentHeadsPreset ToHeadsPreset(WhisperModelSize size) => size switch
+    /// <summary>Cabeças de atenção usadas pelo DTW; os modelos .en têm as suas próprias.</summary>
+    private static WhisperAlignmentHeadsPreset ToHeadsPreset(WhisperModelSize size, bool englishOnly) => (size, englishOnly) switch
     {
-        WhisperModelSize.Tiny => WhisperAlignmentHeadsPreset.Tiny,
-        WhisperModelSize.Base => WhisperAlignmentHeadsPreset.Base,
-        WhisperModelSize.Small => WhisperAlignmentHeadsPreset.Small,
-        WhisperModelSize.Medium => WhisperAlignmentHeadsPreset.Medium,
-        WhisperModelSize.LargeV3Turbo => WhisperAlignmentHeadsPreset.LargeV3Turbo,
+        (WhisperModelSize.Tiny, false) => WhisperAlignmentHeadsPreset.Tiny,
+        (WhisperModelSize.Tiny, true) => WhisperAlignmentHeadsPreset.TinyEn,
+        (WhisperModelSize.Base, false) => WhisperAlignmentHeadsPreset.Base,
+        (WhisperModelSize.Base, true) => WhisperAlignmentHeadsPreset.BaseEn,
+        (WhisperModelSize.Small, false) => WhisperAlignmentHeadsPreset.Small,
+        (WhisperModelSize.Small, true) => WhisperAlignmentHeadsPreset.SmallEn,
+        (WhisperModelSize.Medium, false) => WhisperAlignmentHeadsPreset.Medium,
+        (WhisperModelSize.Medium, true) => WhisperAlignmentHeadsPreset.MediumEn,
+        (WhisperModelSize.LargeV3Turbo, false) => WhisperAlignmentHeadsPreset.LargeV3Turbo,
         _ => throw new ArgumentOutOfRangeException(nameof(size), size, "Modelo sem preset de alinhamento."),
     };
 

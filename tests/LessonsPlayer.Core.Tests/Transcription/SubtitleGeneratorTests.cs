@@ -58,6 +58,24 @@ public sealed class SubtitleGeneratorTests
             TestContext.Current.CancellationToken);
     }
 
+    [Fact]
+    public async Task English_only_model_forces_english()
+    {
+        _transcriber.TranscribeAsync(default!, default!, TestContext.Current.CancellationToken).ReturnsForAnyArgs(Segments(
+            new RecognizedSegment(Ms(0), Ms(1000), " Hello", [], "en")));
+
+        var transcript = await _generator.GenerateAsync(
+            "a.mp3", new TranscriptionOptions(WhisperModels.SmallEnglish, TranscriptionLanguages.Auto, UseGpu: true), null,
+            TestContext.Current.CancellationToken);
+
+        _transcriber.Received(1).TranscribeAsync(
+            Arg.Any<AudioSamples>(),
+            new TranscriberSettings("C:/models/small.bin", WhisperModelSize.Small, "en", true, EnglishOnly: true),
+            TestContext.Current.CancellationToken);
+        transcript.Metadata.Language.ShouldBe("en");
+        transcript.Metadata.Model.ShouldBe("small.en-q5_1");
+    }
+
     private static async IAsyncEnumerable<RecognizedSegment> Segments(params RecognizedSegment[] segments)
     {
         foreach (var segment in segments)

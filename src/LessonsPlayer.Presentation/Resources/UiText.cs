@@ -103,7 +103,15 @@ public static class UiText
     public static string WordTooltip(Word word) =>
         $"{Formatting.TimeFormat.Precise(word.Start)} → {Formatting.TimeFormat.Precise(word.End)}";
 
-    public static string ModelName(WhisperModel model) => model.Size switch
+    public static string ModelName(WhisperModel model) => model.EnglishOnly
+        ? model.Size switch
+        {
+            WhisperModelSize.Base => "Base.en — só inglês, rápido",
+            WhisperModelSize.Small => "Small.en — só inglês, equilíbrio",
+            WhisperModelSize.Medium => "Medium.en — só inglês, mais preciso",
+            _ => model.Id,
+        }
+        : model.Size switch
     {
         WhisperModelSize.Tiny => "Tiny — o mais rápido",
         WhisperModelSize.Base => "Base — rápido",
