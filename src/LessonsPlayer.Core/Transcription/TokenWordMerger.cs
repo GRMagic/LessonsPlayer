@@ -6,10 +6,14 @@ namespace LessonsPlayer.Core.Transcription;
 /// <summary>
 /// Converte um trecho reconhecido (tokens com tempo) em um <see cref="Segment"/> de palavras com tempo.
 /// <para>
-/// O texto das palavras vem de <see cref="RecognizedSegment.Text"/>, que é decodificado inteiro.
-/// O texto de cada token isolado pode trazer caracteres acentuados quebrados, quando um caractere
-/// UTF-8 é dividido entre tokens. Dos tokens vem apenas o tempo: o início de uma palavra é o tempo
-/// alinhado (DTW) do primeiro token dela, e o fim é o início da palavra seguinte.
+/// <b>Texto:</b> vem de <see cref="RecognizedSegment.Text"/>, que é decodificado inteiro. O texto de cada
+/// token isolado pode trazer acentos quebrados, quando um caractere UTF-8 é dividido entre tokens.
+/// </para>
+/// <para>
+/// <b>Tempo:</b> o alinhamento DTW dá o <i>fim</i> de cada token (ver <see cref="RecognizedToken.AlignedEnd"/>).
+/// Assim, a palavra começa no fim alinhado do token anterior e termina no fim alinhado do seu último token
+/// com letras. Pontuação absorve as pausas, que ficam como intervalos sem palavra. A primeira palavra do
+/// trecho, sem token anterior, usa o início estimado pelo decodificador.
 /// </para>
 /// </summary>
 public static class TokenWordMerger
@@ -28,24 +32,34 @@ public static class TokenWordMerger
         var segmentEnd = segment.End < segmentStart ? segmentStart : segment.End;
         var tokenWords = GroupTokensIntoWords(segment.Tokens, segmentStart, segmentEnd);
 
-        var starts = tokenWords.Count == textWords.Length
-            ? tokenWords.Select(w => w.Start).ToArray()
-            : tokenWords.Count == 0
-                ? TimeDistribution.Distribute(segmentStart, segmentEnd, textWords).Select(w => w.Start).ToArray()
-                : InterpolateByCharacterPosition(tokenWords, textWords, segmentEnd);
-
-        var words = ImmutableArray.CreateBuilder<Word>(textWords.Length);
-        var previousStart = segmentStart;
-        for (var i = 0; i < textWords.Length; i++)
+        TimeSpan[] starts;
+        TimeSpan?[] ends;
+        if (tokenWords.Count == textWords.Length)
         {
-            var start = Clamp(starts[i], previousStart, segmentEnd); // garante ordem crescente
-            starts[i] = start;
-            previousStart = start;
+            starts = [.. tokenWords.Select(w => w.Start)];
+            ends = [.. tokenWords.Select(w => w.End)];
+        }
+        else
+        {
+            starts = tokenWords.Count == 0
+                ? [.. TimeDistribution.Distribute(segmentStart, segmentEnd, textWords).Select(w => w.Start)]
+                : InterpolateByCharacterPosition(tokenWords, textWords, segmentEnd);
+            ends = new TimeSpan?[textWords.Length]; // sem correspondência confiável: termina onde a próxima começa
         }
 
+        // Garante ordem crescente dos inícios dentro do trecho.
+        var previousStart = segmentStart;
+        for (var i = 0; i < starts.Length; i++)
+        {
+            starts[i] = Clamp(starts[i], previousStart, segmentEnd);
+            previousStart = starts[i];
+        }
+
+        var words = ImmutableArray.CreateBuilder<Word>(textWords.Length);
         for (var i = 0; i < textWords.Length; i++)
         {
-            var end = i + 1 < textWords.Length ? starts[i + 1] : segmentEnd;
+            var limit = i + 1 < starts.Length ? starts[i + 1] : segmentEnd;
+            var end = Clamp(ends[i] ?? limit, starts[i], limit);
             words.Add(new Word(starts[i], end, textWords[i]));
         }
 
@@ -70,6 +84,7 @@ public static class TokenWordMerger
             return words;
         }
 
+        TimeSpan? previousTokenEnd = null;
         var startNewWord = true;
         foreach (var token in tokens)
         {
@@ -78,18 +93,19 @@ public static class TokenWordMerger
                 continue;
             }
 
-            var beginsWithSpace = char.IsWhiteSpace(token.Text[0]);
+            var tokenEnd = token.AlignedEnd ?? token.End;
             var trimmed = token.Text.Trim();
             if (trimmed.Length == 0)
             {
                 startNewWord = true; // token só de espaço: a próxima palavra começa depois dele
+                previousTokenEnd = tokenEnd;
                 continue;
             }
 
-            if (startNewWord || beginsWithSpace || words.Count == 0)
+            if (startNewWord || char.IsWhiteSpace(token.Text[0]) || words.Count == 0)
             {
-                var time = Clamp(token.AlignedStart ?? token.Start, segmentStart, segmentEnd);
-                words.Add(new TokenWord(trimmed.Length, time));
+                var start = Clamp(previousTokenEnd ?? token.Start, segmentStart, segmentEnd);
+                words.Add(new TokenWord(trimmed.Length, start, End: null));
                 startNewWord = false;
             }
             else
@@ -97,11 +113,19 @@ public static class TokenWordMerger
                 words[^1] = words[^1] with { Length = words[^1].Length + trimmed.Length };
             }
 
+            // O fim da palavra é o do último token com letras: a pontuação final costuma cobrir a pausa.
+            if (token.AlignedEnd is { } alignedEnd && trimmed.Any(char.IsLetterOrDigit))
+            {
+                words[^1] = words[^1] with { End = Clamp(alignedEnd, segmentStart, segmentEnd) };
+            }
+
             // Palavras não contêm espaço interno; se o token tiver, o que vem depois é outra palavra.
             if (trimmed.Any(char.IsWhiteSpace))
             {
                 startNewWord = true;
             }
+
+            previousTokenEnd = tokenEnd;
         }
 
         return words;
@@ -162,5 +186,5 @@ public static class TokenWordMerger
     private static TimeSpan Clamp(TimeSpan value, TimeSpan min, TimeSpan max) =>
         value < min ? min : value > max ? max : value;
 
-    private readonly record struct TokenWord(int Length, TimeSpan Start);
+    private readonly record struct TokenWord(int Length, TimeSpan Start, TimeSpan? End);
 }
