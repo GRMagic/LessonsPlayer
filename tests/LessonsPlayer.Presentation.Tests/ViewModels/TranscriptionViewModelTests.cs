@@ -154,7 +154,7 @@ public sealed class TranscriptionViewModelTests
         await _vm.GenerateCommand.ExecuteAsync(null);
         _vm.StatusText.ShouldNotBeNull();
 
-        _vm.TargetAudioFilePath = @"C:ulasula2.mp3";
+        _vm.TargetAudioFilePath = @"C:\aulas\aula2.mp3";
 
         _vm.StatusText.ShouldBeNull();
     }

@@ -116,7 +116,7 @@ public sealed class MainViewModelTests
     [Fact]
     public async Task Canceling_a_track_switch_puts_the_selection_back_on_the_current_track()
     {
-        await _vm.OpenPathsAsync([@"C:ulas"]);
+        await _vm.OpenPathsAsync([@"C:\aulas"]);
         _vm.Transcript.DeleteWordCommand.Execute(_vm.Transcript.Segments[0].Words[0]);
         _dialogs.AskSaveChanges(default!).ReturnsForAnyArgs(SaveChangesChoice.Cancel);
         var other = _vm.Playlist.Items[1];
@@ -131,7 +131,7 @@ public sealed class MainViewModelTests
     [Fact]
     public async Task Saving_confirms_in_the_status_bar()
     {
-        await _vm.OpenPathsAsync([@"C:ulas"]);
+        await _vm.OpenPathsAsync([@"C:\aulas"]);
         _vm.Transcript.DeleteWordCommand.Execute(_vm.Transcript.Segments[0].Words[0]);
 
         await _vm.Transcript.SaveAsync(TestContext.Current.CancellationToken);
@@ -254,7 +254,7 @@ public sealed class MainViewModelTests
     public async Task Shutdown_waits_for_a_running_generation_to_stop()
     {
         var ct = TestContext.Current.CancellationToken;
-        await _vm.OpenPathsAsync([@"C:ulas"]);
+        await _vm.OpenPathsAsync([@"C:\aulas"]);
         await _vm.NextTrackCommand.ExecuteAsync(null); // aula2, sem legenda
         var started = new TaskCompletionSource();
         var stopped = false;
