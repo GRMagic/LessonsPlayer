@@ -2,22 +2,18 @@
 
 Melhorias pedidas pelo usuário em 2026-11-06, depois de usar o programa, para fazer depois do trabalho em andamento (correções do QA, frases inteiras, alucinação do Whisper). Cada item tem uma nota de como fazer e as dúvidas em aberto.
 
-## Bugs a investigar
+## Resolvidos
 
 ### Áudio e legenda fora de sincronia depois de editar e posicionar
-Relatado pelo usuário: ouvindo um áudio de teste com uma pessoa real falando (na Área de Trabalho), ele editou uma palavra com duplo clique ("shop." → "#.", com o small). Depois disso:
-- tocar desde o início continua sincronizado;
-- tocar a partir de um ponto depois da edição fica fora de sincronia;
-- sem editar, o áudio toca sincronizado.
+Relatado pelo usuário: ouvindo um áudio de teste (uma pessoa real falando), ele editou uma palavra com duplo clique ("shop." → "#."). Depois disso, tocar desde o início ficava sincronizado, mas tocar a partir de um ponto depois da edição, não.
 
-**Hipóteses a testar:**
-- **Seek impreciso em MP3**, principalmente VBR sem índice: a posição informada pelo leitor depois do reposicionamento não corresponde à posição real. Nesse caso a edição seria coincidência, e qualquer clique depois do ponto mostraria o problema.
-- **A edição estraga o índice ou os tempos** (`WordIndex` ou os `WordViewModel` reconstruídos depois de corrigir a palavra).
-- **O texto "#."**: linhas que começam com `#` são comentário no formato `.txt`. Só importaria ao salvar e recarregar, mas vale conferir.
+**Causa (medida):** o seek em MP3 VBR, e não a edição. O arquivo era um MP3 VBR (LAME, 32–224 kbps). O `AudioFileReader` do NAudio 3 decodifica MP3 pelo Media Foundation, e depois de um seek o áudio começava até 3 s longe da posição informada (+3,0 s em 5 s, −2,0 s em 40 s). Qualquer clique numa palavra faz um seek. A edição foi coincidência: o duplo clique começa com um clique, que já posiciona.
 
-**Como reproduzir:**
-- comparar a posição do player com a posição real depois de um seek, no mesmo arquivo;
-- repetir clicando numa palavra sem editar nada.
+**Correção:** o `AudioFileSource` abre MP3 com o `Mp3FileReader`, que indexa os quadros ao abrir. O erro do seek caiu para 0 ms, tanto no arquivo do usuário quanto no teste `SeekAccuracyTests`, que usa um MP3 VBR montado no próprio teste.
+
+**Hipóteses descartadas com teste:**
+- a edição deslocaria os tempos ou o índice do karaokê;
+- o "#." seria lido como comentário ao salvar e recarregar.
 
 ## Próximas
 

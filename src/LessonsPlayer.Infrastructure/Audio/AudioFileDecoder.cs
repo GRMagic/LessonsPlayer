@@ -8,7 +8,7 @@ namespace LessonsPlayer.Infrastructure.Audio;
 
 /// <summary>
 /// Decodifica o áudio para 16 kHz mono float, como exige o Whisper.
-/// Usa o mesmo <see cref="AudioFileReader"/> do player, para que a base de tempo da legenda seja
+/// Usa o mesmo <see cref="AudioFileSource"/> do player, para que a base de tempo da legenda seja
 /// idêntica à da reprodução (atraso inicial de MP3, seek em VBR etc.).
 /// </summary>
 public sealed class AudioFileDecoder : IAudioDecoder
