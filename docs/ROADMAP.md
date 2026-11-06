@@ -2,7 +2,27 @@
 
 Melhorias pedidas pelo usuário em 2026-11-06, depois de usar o programa, para fazer depois do trabalho em andamento (correções do QA, frases inteiras, alucinação do Whisper). Cada item tem uma nota de como fazer e as dúvidas em aberto.
 
+## Bugs a investigar
+
+### Áudio e legenda fora de sincronia depois de editar e posicionar
+Relatado pelo usuário: ouvindo um áudio de teste com uma pessoa real falando (na Área de Trabalho), ele editou uma palavra com duplo clique ("shop." → "#.", com o small). Depois disso:
+- tocar desde o início continua sincronizado;
+- tocar a partir de um ponto depois da edição fica fora de sincronia;
+- sem editar, o áudio toca sincronizado.
+
+**Hipóteses a testar:**
+- **Seek impreciso em MP3**, principalmente VBR sem índice: a posição informada pelo leitor depois do reposicionamento não corresponde à posição real. Nesse caso a edição seria coincidência, e qualquer clique depois do ponto mostraria o problema.
+- **A edição estraga o índice ou os tempos** (`WordIndex` ou os `WordViewModel` reconstruídos depois de corrigir a palavra).
+- **O texto "#."**: linhas que começam com `#` são comentário no formato `.txt`. Só importaria ao salvar e recarregar, mas vale conferir.
+
+**Como reproduzir:**
+- comparar a posição do player com a posição real depois de um seek, no mesmo arquivo;
+- repetir clicando numa palavra sem editar nada.
+
 ## Próximas
+
+### Excluir a legenda de uma aula
+Clique com o botão direito no item da playlist ou no ícone CC ao lado do nome → "Excluir legenda". O app pede confirmação, apaga o `.legenda.txt` e atualiza o ícone e o painel. Se a aula estiver aberta com alterações não salvas, elas são descartadas junto (avisar isso na confirmação).
 
 ### Interface em inglês
 Quem usa o programa é o professor de inglês, ao lado dos alunos. Os textos ficam todos em `UiText` (Presentation), então dá para trocar num lugar só. Vale aproveitar e passar para `.resx`, o que deixa outros idiomas possíveis depois.
