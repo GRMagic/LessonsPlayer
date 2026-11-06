@@ -89,6 +89,7 @@ dotnet run --project src/LessonsPlayer.App
 ```
 
 - Os testes de integração baixam modelos e usam as vozes do Windows (pt-BR e en-US). Para testar outros modelos: `$env:LESSONSPLAYER_TEST_MODELS = "small-q5_1,large-v3-turbo-q5_0"`.
+- Áudio real (opcional): `$env:LESSONSPLAYER_REAL_AUDIO_DIR = "<pasta>"`, com uma subpasta por áudio contendo `audio.mp3`, `reference-segments.tsv` (legenda humana: `start_ms, end_ms, text`) e `reference-words.tsv` (legenda automática do YouTube: `start_ms, word`). O `RealAudioComparisonTests` grava `comparison-<modelo>.txt` com WER, erro por palavra e erro no início das frases.
 - No build Debug, `$env:LESSONSPLAYER_DEBUG_SNAPSHOTS = "<pasta>"` faz a janela se salvar em `latest.png` a cada segundo. Serve para testes de UI automatizados, mesmo com a tela bloqueada.
 
 ### Arquitetura
@@ -118,6 +119,19 @@ Medida pelo teste `TimestampPrecisionTests`, que compara com o instante real de 
 
 Em todas as aulas longas a transcrição foi até a última palavra, com 99–100% das palavras corretas em inglês.
 
+**Áudio real** (`RealAudioComparisonTests`, MP3 do YouTube): uma aula da Khan Academy (10 min, 1 falante), uma conversa do StoryCorps com música de fundo (6 min, 2 falantes) e uma entrevista da NASA via satélite (13 min, 10+ falantes). O texto é comparado com a legenda humana. O tempo é comparado com a legenda automática do YouTube, que é de outro reconhecedor e também tem erro.
+
+| Modelo | WER Khan | WER StoryCorps | Palavra vs. YouTube (mediana): Khan / StoryCorps / NASA | Início de frase vs. legenda humana, Khan (mediana / p90) |
+|---|---|---|---|---|
+| small | 3,1% | 5,1% | 180 / 59 / 81 ms | 80 / 340 ms |
+| small.en | 2,7% | 5,9% | 180 / 41 / 100 ms | 80 / 310 ms |
+| large-v3-turbo | 2,3% | 4,6% | 180 / 41 / 80 ms | 160 / 390 ms |
+
+- No Khan, todas as palavras ficam ~180 ms **antes** da legenda automática. É um viés constante entre os dois reconhecedores. A legenda humana, que é bem sincronizada nesse vídeo, fica a 80 ms.
+- A legenda humana da NASA é estenotipia ao vivo, ~3,5 s atrasada e com omissões (WER de 34–45% contra ela). Lá vale só a comparação de tempo com a automática.
+- Nenhuma frase ficou cortada (sem o `SentenceRegrouper`, eram 67 de 125 trechos no Khan com o small).
+- Em trechos longos sem fala (créditos com música, fim da transmissão), o Whisper às vezes **inventa texto** ("Thank you.", frases repetidas). Ainda não é filtrado.
+
 ### Notas técnicas (descobertas com evidência)
 
 - **`t_dtw` do whisper.cpp marca o *fim* do token**, não o início. A atribuição é deslocada em um índice em relação à implementação da OpenAI. Por isso o início de uma palavra é o `t_dtw` do token anterior (`TokenWordMerger`). Interpretado do jeito ingênuo, o erro mediano era ~250 ms.
@@ -125,4 +139,8 @@ Em todas as aulas longas a transcrição foi até a última palavra, com 99–10
 - **Cada fatia processa só a primeira janela.** Depois dela, o whisper.cpp seguiria com a sobra da fatia: trabalho perdido (os trechos não são entregues) e, numa sobra de até ~150 ms, um abort nativo no filtro mediano do DTW (`WHISPER_ASSERT(filter_width < a->ne[2])`, corrigido no whisper.cpp depois da versão do Whisper.net 1.9.1). O handler de início do encoder interrompe antes da segunda janela: mesmos trechos, transcrição mais rápida (medium: 45 s → 22 s numa aula de 2,5 min).
 - **O Whisper corta frases longas em mais de um trecho**, pelos timestamps que o próprio decodificador prevê. Acontece com e sem DTW e com e sem prompt, quase sempre no meio da janela e não na fronteira das fatias. Numa aula TTS em inglês de 2,5 min, o small cortou as 15 frases. O `SentenceRegrouper` completa cada frase inacabada com as palavras seguintes até o ponto final (até 30 s, sem pausa maior que 2 s), sem mudar o tempo das palavras.
 - **Reprodução e transcrição usam o mesmo leitor (`AudioFileReader`)**. Assim o atraso inicial do MP3 e o seek em VBR não desalinham legenda e áudio. A posição exibida vem do relógio do WASAPI, ou seja, do que já saiu no alto-falante, e não do buffer.
+- **Fim de faixa = fonte esgotada.** Em MP3 o tamanho total (`Length`) é estimado e pode passar do que é decodificado; comparar posição com tamanho nunca chegava ao fim, e o player ficava "tocando" em 0:00. Além disso, o `PlaybackStopped` do NAudio é postado na thread da UI, depois que o `Stop()` de um seek já voltou. O player marca o fim quando o leitor devolve 0 bytes (`EndTrackingWaveProvider`).
+- **Liberar o modelo com o whisper.cpp calculando derruba o processo** (0xC0000005 em `ggml-cpu-whisper.dll`, ao fechar o app durante uma geração na CPU). O Whisper.net não tem callback de abortar: o cancelamento só vale entre etapas, e na CPU com o large pode levar ~20 s. Por isso o `Dispose` do transcritor cancela e espera, e a janela some antes dessa espera.
+- **Download sem esperar o IPv6.** Numa rede sem rota IPv6, o .NET tentava os 8 endereços IPv6 do huggingface.co em sequência (~21 s cada) antes do IPv4: ~170 s em "0%". O `HttpClient` dos modelos conecta no estilo *Happy Eyeballs* (RFC 8305): IPv6 e IPv4 em paralelo. Medido: 2 s até os cabeçalhos.
+- **Marcações do Whisper que não são fala**: `[BLANK_AUDIO]` (silêncio), `[Music]`, `(risos)` e o `>>` de troca de falante (aprendido de legendas de TV) são descartados.
 - Nos testes, o `AudioPosition` do System.Speech só é correto no formato nativo da voz (16 kHz mono). Isso é um bug do `AudioFileOut.Duration`, por isso o TTS é gerado nesse formato e convertido depois.
