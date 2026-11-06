@@ -36,7 +36,7 @@ public sealed class MainViewModelTests
         var decoder = Substitute.For<IAudioDecoder>();
         decoder.DecodeForSpeechAsync(default!, default)
             .ReturnsForAnyArgs(new AudioSamples(new float[AudioSamples.SpeechSampleRate], AudioSamples.SpeechSampleRate));
-        var generator = new SubtitleGenerator(models, decoder, _transcriber, TimeProvider.System);
+        var generator = new SubtitleGenerator(models, decoder, Substitute.For<ISpeechDetector>(), _transcriber, TimeProvider.System);
 
         var dispatcher = new ImmediateDispatcher();
         _vm = new MainViewModel(

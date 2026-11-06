@@ -67,7 +67,7 @@ A precisão do **tempo** das palavras é parecida em todos (veja [Precisão](#pr
 ./scripts/publish.ps1          # gera artifacts/publish/LessonsPlayer-win-x64 (+ .zip)
 ```
 
-A pasta é **self-contained**: roda em Windows 10/11 x64 sem .NET, Python ou CUDA instalados. Basta descompactar e abrir `LessonsPlayer.exe`. Dos ~100 MB do zip, cerca de metade é o runtime Vulkan, que habilita a GPU. Nas edições "N" do Windows é preciso o *Media Feature Pack*, por causa da decodificação de áudio.
+A pasta é **self-contained**: roda em Windows 10/11 x64 sem .NET, Python ou CUDA instalados. Basta descompactar e abrir `LessonsPlayer.exe`. Dos ~100 MB do zip, cerca de metade é o runtime Vulkan, que habilita a GPU. O detector de voz (Silero VAD, 0,9 MB, licença MIT) vai junto, na pasta `vad`. Nas edições "N" do Windows é preciso o *Media Feature Pack*, por causa da decodificação de áudio.
 
 Dados do usuário:
 
@@ -101,7 +101,7 @@ App (WPF: views, serviços de UI, composition root com Generic Host + Serilog)
        └─► Core (domínio imutável, formato .txt, editor, regras puras; sem dependências externas)
 ```
 
-- **Core**: `Transcript`/`Segment`/`Word` imutáveis, `SubtitleTxtFormat`, `TranscriptEditor` (desfazer/refazer), `TextRealigner` (LCS), `WordIndex` (busca binária), `TokenWordMerger`, `SentenceRegrouper`, `SubtitleGenerator` (caso de uso) e as interfaces implementadas pela Infrastructure.
+- **Core**: `Transcript`/`Segment`/`Word` imutáveis, `SubtitleTxtFormat`, `TranscriptEditor` (desfazer/refazer), `TextRealigner` (LCS), `WordIndex` (busca binária), `TokenWordMerger`, `SentenceRegrouper`, `SpeechActivity`/`HallucinationFilter` (regiões com fala e descarte do texto inventado), `SubtitleGenerator` (caso de uso) e as interfaces implementadas pela Infrastructure.
 - Qualidade: `Nullable`, analisadores `latest-recommended`, *warnings as errors*, `.editorconfig` e versões centralizadas em `Directory.Packages.props`.
 
 ### Precisão
@@ -119,18 +119,20 @@ Medida pelo teste `TimestampPrecisionTests`, que compara com o instante real de 
 
 Em todas as aulas longas a transcrição foi até a última palavra, com 99–100% das palavras corretas em inglês.
 
+O NonSpeechHallucinationTests monta uma aula TTS com 25 s de música ou ruído no meio e no fim. Antes do detector de voz, 6 dos 8 casos (base, small, small.en e large-v3-turbo) falhavam: o base inventava frases inteiras no ruído, e a primeira palavra depois da música saía até 27 s antes de ser dita. Agora não sobra palavra inventada e essa palavra fica a 30 ms do tempo real. A precisão acima não mudou (os 21 casos deram exatamente os mesmos números), porque as aulas TTS não têm pausas de 2 s.
+
 **Áudio real** (`RealAudioComparisonTests`, MP3 do YouTube): uma aula da Khan Academy (10 min, 1 falante), uma conversa do StoryCorps com música de fundo (6 min, 2 falantes) e uma entrevista da NASA via satélite (13 min, 10+ falantes). O texto é comparado com a legenda humana. O tempo é comparado com a legenda automática do YouTube, que é de outro reconhecedor e também tem erro.
 
-| Modelo | WER Khan | WER StoryCorps | Palavra vs. YouTube (mediana): Khan / StoryCorps / NASA | Início de frase vs. legenda humana, Khan (mediana / p90) |
-|---|---|---|---|---|
-| small | 3,1% | 5,1% | 180 / 59 / 81 ms | 80 / 340 ms |
-| small.en | 2,7% | 5,9% | 180 / 41 / 100 ms | 80 / 310 ms |
-| large-v3-turbo | 2,3% | 4,6% | 180 / 41 / 80 ms | 160 / 390 ms |
+| Modelo | WER Khan | WER StoryCorps | Palavra vs. YouTube (mediana): Khan / StoryCorps / NASA | Início de frase vs. legenda humana, Khan (mediana / p90) | Palavras inventadas: StoryCorps / NASA |
+|---|---|---|---|---|---|
+| small | 3,1% | 6,3% | 180 / 50 / 90 ms | 80 / 340 ms | 0 / 0 |
+| small.en | 2,7% | 5,7% | 180 / 50 / 91 ms | 80 / 310 ms | 0 / 0 (eram 6) |
+| large-v3-turbo | 2,2% | 3,8% | 180 / 50 / 71 ms | 160 / 390 ms | 0 (eram 12) / 0 (eram 5) |
 
 - No Khan, todas as palavras ficam ~180 ms **antes** da legenda automática. É um viés constante entre os dois reconhecedores. A legenda humana, que é bem sincronizada nesse vídeo, fica a 80 ms.
 - A legenda humana da NASA é estenotipia ao vivo, ~3,5 s atrasada e com omissões (WER de 34–45% contra ela). Lá vale só a comparação de tempo com a automática.
 - Nenhuma frase ficou cortada (sem o `SentenceRegrouper`, eram 67 de 125 trechos no Khan com o small).
-- Em trechos longos sem fala (créditos com música, fim da transmissão), o Whisper às vezes **inventa texto** ("Thank you.", frases repetidas). Ainda não é filtrado.
+- Em trechos longos sem fala (créditos com música, fim da transmissão), o Whisper **inventava texto**: "I mean those are the most important things to say." e "you you Thank you." nos créditos do StoryCorps (large), "We will begin the session." repetido no fim da NASA (small.en). Com o detector de voz (ver [Notas técnicas](#notas-técnicas-descobertas-com-evidência)), nenhuma palavra inventada sobrou. "Inventada" é uma palavra fora das frases da legenda humana e a mais de 3 s de qualquer palavra da automática. As palavras casadas com a automática ficaram iguais ou subiram em 7 de 9 casos (Khan: idênticas; NASA small: 1.894 → 1.970), e caíram 2 no NASA large e 7 no StoryCorps small. A piora no WER do StoryCorps com o small (5,1% → 6,3%) vem de outras escolhas de palavra ("silly pen" virou "sewie pen", "him" virou "them"): as fatias começam em outros pontos e o decodificador muda.
 
 ### Notas técnicas (descobertas com evidência)
 
@@ -142,5 +144,7 @@ Em todas as aulas longas a transcrição foi até a última palavra, com 99–10
 - **Fim de faixa = fonte esgotada.** Em MP3 o tamanho total (`Length`) é estimado e pode passar do que é decodificado; comparar posição com tamanho nunca chegava ao fim, e o player ficava "tocando" em 0:00. Além disso, o `PlaybackStopped` do NAudio é postado na thread da UI, depois que o `Stop()` de um seek já voltou. O player marca o fim quando o leitor devolve 0 bytes (`EndTrackingWaveProvider`).
 - **Liberar o modelo com o whisper.cpp calculando derruba o processo** (0xC0000005 em `ggml-cpu-whisper.dll`, ao fechar o app durante uma geração na CPU). O Whisper.net não tem callback de abortar: o cancelamento só vale entre etapas, e na CPU com o large pode levar ~20 s. Por isso o `Dispose` do transcritor cancela e espera, e a janela some antes dessa espera.
 - **Download sem esperar o IPv6.** Numa rede sem rota IPv6, o .NET tentava os 8 endereços IPv6 do huggingface.co em sequência (~21 s cada) antes do IPv4: ~170 s em "0%". O `HttpClient` dos modelos conecta no estilo *Happy Eyeballs* (RFC 8305): IPv6 e IPv4 em paralelo. Medido: 2 s até os cabeçalhos.
-- **Marcações do Whisper que não são fala**: `[BLANK_AUDIO]` (silêncio), `[Music]`, `(risos)` e o `>>` de troca de falante (aprendido de legendas de TV) são descartados.
+- **Marcações do Whisper que não são fala** são descartadas. Vistas nas legendas geradas (Whisper.net 1.9.1): `[BLANK_AUDIO]` (silêncio), `[Music]`, `[MUSIC PLAYING]`, `[ Silence ]`, `[static]`, `[sound of water]`, `[typing sounds]` (small, small.en e base) e o `>>` de troca de falante, aprendido de legendas de TV (small e small.en). O large-v3-turbo não usa colchetes: escreve `Music.` como texto, e quem o remove é o filtro de fala abaixo. O whisper.cpp tem a opção `suppress_nst`, que proíbe esses tokens, mas ela vem desligada e o Whisper.net 1.9.1 não a expõe.
+- **Texto inventado em trechos sem fala.** Em música, créditos e silêncio longo, o Whisper às vezes escreve o que ninguém disse ("Thank you.", "you you", "We will begin the session." repetido), com a mesma confiança da fala real. Medido em 3 vídeos reais: a probabilidade de "sem fala" do whisper.cpp ficou em ~0 nesses trechos, e a probabilidade média dos tokens em 0,77–0,99, a mesma faixa da fala real. Por isso nem os limiares do decodificador (`WithNoSpeechThreshold`, `WithLogProbThreshold`) nem filtros por probabilidade resolvem. Quem resolve é um detector de voz: o Silero VAD (v6.2.0, pelo `WhisperVadFactory` do Whisper.net) marca onde há fala. A transcrição pula os trechos sem fala de 2 s ou mais, a fatia termina antes de um trecho sem fala de 10 s ou mais (vinheta), e as palavras que começam a mais de 1,5 s de qualquer fala são descartadas (`HallucinationFilter`). Texto que é só marcação (`[BLANK_AUDIO]`) não vai para o prompt da janela seguinte; e, quando o último trecho de uma fatia vai bem além da última palavra e o VAD ouviu fala nessa sobra, a fatia seguinte recomeça na última palavra (o modelo tinha pulado a fala). O áudio não é cortado nem emendado, então os tempos continuam absolutos.
+- **Laço de repetição.** Às vezes o decodificador repete uma frase até o fim da janela, no lugar da fala real (na NASA, com o small: "I think it's a great opportunity to talk about space." 14 vezes). O texto anterior, passado como prompt, prende o modelo no ciclo. Quando a razão de compressão da janela passa de 2,4 (o limiar do Whisper original), ela é decodificada de novo sem o prompt. Nesse caso a razão caiu de 11,2 para 1,6, e a fala real voltou.
 - Nos testes, o `AudioPosition` do System.Speech só é correto no formato nativo da voz (16 kHz mono). Isso é um bug do `AudioFileOut.Duration`, por isso o TTS é gerado nesse formato e convertido depois.

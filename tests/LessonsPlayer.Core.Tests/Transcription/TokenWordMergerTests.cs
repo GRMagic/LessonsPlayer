@@ -35,6 +35,22 @@ public sealed class TokenWordMergerTests
         ]);
     }
 
+    [Fact]
+    public void Last_aligned_word_end_ignores_punctuation_and_timestamp_tokens()
+    {
+        // O trecho vai até 30 s, mas a última palavra termina em 5 s: o modelo pulou o resto da janela.
+        var segment = SegmentOf(1000, 30_000, " That's it.",
+            Token(" That", 1000, 1500),
+            Token("'s", 1500, 1800),
+            Token(" it", 1800, 5000),
+            Token(".", 5000, 5200),
+            new RecognizedToken("[_TT_1500]", Ms(30_000), Ms(30_000), Ms(30_000)));
+
+        TokenWordMerger.LastAlignedWordEnd(segment).ShouldBe(Ms(5000));
+        TokenWordMerger.LastAlignedWordEnd(SegmentOf(0, 1000, " Hi", new RecognizedToken(" Hi", Ms(0), Ms(500), null)))
+            .ShouldBeNull();
+    }
+
     [Theory]
     [InlineData(" [BLANK_AUDIO]")]
     [InlineData(" [ Silence ]")]

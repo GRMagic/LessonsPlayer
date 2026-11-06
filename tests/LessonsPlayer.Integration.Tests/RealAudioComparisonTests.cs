@@ -36,6 +36,9 @@ public sealed class RealAudioComparisonTests
     /// <summary>Pausas maiores que isso entre legendas humanas são tratadas como trecho sem legenda.</summary>
     private static readonly TimeSpan CoverageGap = TimeSpan.FromSeconds(20);
 
+    /// <summary>Uma palavra sem palavra da legenda automática a menos disso (e fora da legenda humana) conta como inventada.</summary>
+    private static readonly TimeSpan InventedWordWindow = TimeSpan.FromSeconds(3);
+
     [Fact]
     public async Task Compare_with_real_audio_references()
     {
@@ -76,7 +79,7 @@ public sealed class RealAudioComparisonTests
         using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         var models = new HuggingFaceModelStore(http, InfrastructureOptions.CreateDefault(), NullLogger<HuggingFaceModelStore>.Instance);
         using var transcriber = new WhisperNetTranscriber(NullLogger<WhisperNetTranscriber>.Instance);
-        var generator = new SubtitleGenerator(models, new AudioFileDecoder(), transcriber, TimeProvider.System);
+        var generator = new SubtitleGenerator(models, new AudioFileDecoder(), TestSpeechDetector.Create(), transcriber, TimeProvider.System);
 
         var stopwatch = Stopwatch.StartNew();
         var transcript = await generator.GenerateAsync(audioPath, new TranscriptionOptions(model, "en", UseGpu: true), progress: null, ct);
@@ -94,6 +97,7 @@ public sealed class RealAudioComparisonTests
             $"   trechos sem pontuação final (frase cortada): {transcript.Segments.Count(s => !EndsSentence(s.Text))} de {transcript.Segments.Length}");
 
         AppendTextAccuracy(sb, cues, words);
+        AppendInventedWords(sb, cues, autoWords, words);
         AppendWordTiming(sb, autoWords, words);
         AppendCueTiming(sb, cues, words);
         return sb.ToString();
@@ -114,6 +118,23 @@ public sealed class RealAudioComparisonTests
         sb.AppendLine(CultureInfo.InvariantCulture,
             $"   texto: WER {100.0 * errors / Math.Max(1, reference.Length):F1}% ({errors} erros em {reference.Length} palavras da legenda humana; " +
             $"{words.Count - hypothesis.Length} palavras reconhecidas fora dos trechos legendados)");
+    }
+
+    /// <summary>
+    /// Palavras provavelmente inventadas: fora das frases da legenda humana e sem nenhuma palavra da legenda
+    /// automática a menos de <see cref="InventedWordWindow"/>. Pega o texto inventado em trechos sem fala
+    /// (créditos, música), não o erro de reconhecimento dentro da fala.
+    /// </summary>
+    private static void AppendInventedWords(
+        StringBuilder sb, List<Cue> cues, List<(TimeSpan Start, string Text)> autoWords, List<Word> words)
+    {
+        var invented = words
+            .Where(w => !cues.Any(c => w.Start >= c.Start && w.Start <= c.End))
+            .Where(w => !autoWords.Any(a => (a.Start - w.Start).Duration() <= InventedWordWindow))
+            .ToList();
+        var list = string.Join(' ', invented.Select(w => $"[{Format(w.Start)}]{w.Text}"));
+        sb.AppendLine(CultureInfo.InvariantCulture,
+            $"   palavras inventadas (longe de qualquer legenda): {invented.Count}{(invented.Count > 0 ? " -> " : string.Empty)}{list}");
     }
 
     /// <summary>Início de cada palavra contra a legenda automática do YouTube (tempo por palavra).</summary>

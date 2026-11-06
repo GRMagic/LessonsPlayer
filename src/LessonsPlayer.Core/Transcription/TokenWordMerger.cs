@@ -77,6 +77,18 @@ public static class TokenWordMerger
         return spoken.IsEmpty ? null : new Segment(spoken);
     }
 
+    /// <summary>
+    /// Fim alinhado (DTW) do último token com letras ou dígitos do trecho, ou <c>null</c> se não houver alinhamento.
+    /// </summary>
+    public static TimeSpan? LastAlignedWordEnd(RecognizedSegment segment)
+    {
+        ArgumentNullException.ThrowIfNull(segment);
+        return segment.Tokens.IsDefaultOrEmpty
+            ? null
+            : segment.Tokens.LastOrDefault(t => t.AlignedEnd is not null && !IsSpecialToken(t.Text) && t.Text.Any(char.IsLetterOrDigit))
+                ?.AlignedEnd;
+    }
+
     private static bool IsSpeakerTurnMarker(string word) => word.All(c => c == '>');
 
     /// <summary>Tokens especiais do whisper.cpp: <c>[_BEG_]</c>, <c>[_TT_123]</c>, <c>&lt;|en|&gt;</c> etc.</summary>

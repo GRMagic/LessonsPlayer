@@ -27,7 +27,7 @@ internal sealed record SpeechAudio(string FilePath, IReadOnlyList<SpokenWord> Wo
     /// (<c>_bytesWritten * TicksPerSecond / _wfxIn.nAvgBytesPerSec</c>). Medido: a 22.050 Hz estéreo, a
     /// posição sai multiplicada por 88.200/32.000 = 2,756.
     /// </summary>
-    private const int SapiReferenceSampleRate = 16_000;
+    internal const int SapiReferenceSampleRate = 16_000;
 
     /// <summary>
     /// Gera o áudio em 44,1 kHz estéreo, em WAV ou MP3 (pelo codificador do Media Foundation do Windows),
@@ -37,6 +37,24 @@ internal sealed record SpeechAudio(string FilePath, IReadOnlyList<SpokenWord> Wo
     public static SpeechAudio? TrySynthesize(
         string text, string cultureName, string outputPathWithoutExtension, TestAudioFormat format = TestAudioFormat.Wav)
     {
+        var referencePath = outputPathWithoutExtension + ".16k.wav";
+        var words = TrySynthesizeReference(text, cultureName, referencePath);
+        if (words is null)
+        {
+            return null;
+        }
+
+        var outputPath = outputPathWithoutExtension + (format == TestAudioFormat.Mp3 ? ".mp3" : ".wav");
+        ConvertToStereo44K(referencePath, outputPath, format);
+        return new SpeechAudio(outputPath, words);
+    }
+
+    /// <summary>
+    /// Sintetiza em 16 kHz mono (o formato em que as posições das palavras saem corretas) e retorna as palavras,
+    /// ou <c>null</c> se não houver voz instalada para o idioma.
+    /// </summary>
+    internal static IReadOnlyList<SpokenWord>? TrySynthesizeReference(string text, string cultureName, string referencePath)
+    {
         using var synthesizer = new SpeechSynthesizer();
         var voice = synthesizer.GetInstalledVoices(new CultureInfo(cultureName)).FirstOrDefault(v => v.Enabled);
         if (voice is null)
@@ -44,7 +62,6 @@ internal sealed record SpeechAudio(string FilePath, IReadOnlyList<SpokenWord> Wo
             return null;
         }
 
-        var referencePath = outputPathWithoutExtension + ".16k.wav";
         synthesizer.SelectVoice(voice.VoiceInfo.Name);
         synthesizer.SetOutputToWaveFile(
             referencePath,
@@ -69,12 +86,11 @@ internal sealed record SpeechAudio(string FilePath, IReadOnlyList<SpokenWord> Wo
             }
         }
 
-        var outputPath = outputPathWithoutExtension + (format == TestAudioFormat.Mp3 ? ".mp3" : ".wav");
-        ConvertToStereo44K(referencePath, outputPath, format);
-        return new SpeechAudio(outputPath, words);
+        return words;
     }
 
-    private static void ConvertToStereo44K(string sourcePath, string targetPath, TestAudioFormat format)
+    /// <summary>Converte para 44,1 kHz estéreo, em WAV ou MP3, como os arquivos de aula reais.</summary>
+    internal static void ConvertToStereo44K(string sourcePath, string targetPath, TestAudioFormat format)
     {
         using var reader = new AudioFileReader(sourcePath);
         var stereo = new MonoToStereoSampleProvider(new WdlResamplingSampleProvider(reader, 44_100));

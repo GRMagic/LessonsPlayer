@@ -20,6 +20,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Detector de voz (Silero VAD, licença MIT): tem 0,9 MB e vai junto com o app, na pasta vad\. -->
+    <None Update="Whisper\Vad\ggml-silero-v6.2.0.bin" Link="vad\ggml-silero-v6.2.0.bin" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Whisper\Vad\LICENSE-silero-vad.txt" Link="vad\LICENSE-silero-vad.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="LessonsPlayer.Integration.Tests" />
   </ItemGroup>
 </Project>
