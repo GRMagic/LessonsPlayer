@@ -38,6 +38,31 @@ namespace LessonsPlayer.Infrastructure.Whisper;
 /// <c>"encoder_begin_callback returned false - aborting"</c>, de nível erro, é esperado a cada fatia.
 /// </para>
 /// <para>
+/// <b>Trechos sem fala:</b> com a detecção de voz (<see cref="TranscriberSettings.Speech"/>), uma fatia que
+/// começaria num trecho sem fala de <see cref="MinimumSkip"/> ou mais começa <see cref="SpeechLeadIn"/> antes da
+/// próxima fala, e uma que passaria por cima de um trecho sem fala de <see cref="MinimumCutPause"/> ou mais termina
+/// <see cref="SpeechLeadIn"/> depois do fim da fala. Depois da última fala, a transcrição termina. É em música,
+/// créditos e silêncio longo que o Whisper inventa texto, e o que ele não ouve não tem como inventar. O áudio não é
+/// cortado nem emendado (só mudam o início e o fim da fatia), então os tempos continuam absolutos. Sem isso, a
+/// primeira palavra depois de uma vinheta saía no começo da fatia, até 27 s antes de ser dita. O texto que é só
+/// marcação (<c>[BLANK_AUDIO]</c>) não vai para o prompt: com ele, num teste com fatias cortadas em pausas de 2 s,
+/// o modelo passou a responder <c>[BLANK_AUDIO]</c> por 50 s de fala real (NASA, small.en).
+/// </para>
+/// <para>
+/// <b>Laço de repetição:</b> às vezes o decodificador repete uma frase até o fim da janela, no lugar da fala
+/// (<see cref="RepetitionDetector"/>). Isso vem do prompt: decodificada de novo sem ele, a janela sai certa.
+/// Medido na entrevista da NASA (small): <c>"I think it's a great opportunity to talk about space."</c> 14 vezes,
+/// razão de compressão 11,2; sem o prompt, 1,6 e a fala real. Fica a versão menos repetitiva das duas.
+/// </para>
+/// <para>
+/// <b>Fala pulada:</b> às vezes o último trecho de uma fatia vai até o fim da janela, mas o texto para bem antes:
+/// o modelo pulou a fala do resto da janela. Medido na NASA (small.en): última palavra em 4:38,7, trecho até
+/// 5:03,7, com 17 s de fala segundo o VAD; 55 palavras da legenda automática sumiram. Quando o VAD ouve pelo menos
+/// <see cref="MinimumSkippedSpeech"/> de fala nessa sobra, a próxima fatia começa no fim da última palavra. O
+/// Whisper original, com <c>word_timestamps</c>, recomeça sempre na última palavra; aqui, sem a exigência do VAD,
+/// isso fez o small.en perder 676 palavras na mesma entrevista.
+/// </para>
+/// <para>
 /// <b>Descarte:</b> liberar o modelo enquanto o whisper.cpp ainda calcula derruba o processo (0xC0000005 em
 /// ggml-cpu-whisper.dll; acontecia ao fechar o app durante uma geração na CPU). Por isso <see cref="Dispose"/>
 /// cancela o trabalho em andamento e espera ele terminar antes de liberar o modelo.
@@ -60,8 +85,20 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
     /// <summary>Espera máxima, no descarte, para a transcrição em andamento parar.</summary>
     private static readonly TimeSpan DisposeTimeout = TimeSpan.FromSeconds(30);
 
-    private static readonly Lock RuntimeConfigurationLock = new();
-    private static bool _runtimeConfigured;
+    /// <summary>Ao pular um trecho sem fala, a fatia começa esse tanto antes da fala (o VAD corta sílabas fracas).</summary>
+    private static readonly TimeSpan SpeechLeadIn = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>Trechos sem fala mais curtos que isso não são pulados (pausas normais entre frases).</summary>
+    private static readonly TimeSpan MinimumSkip = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// A fatia termina antes de um trecho sem fala a partir desse tamanho (vinheta, intervalo com música). Cortar em
+    /// pausas curtas também funciona, mas multiplica as fatias numa conversa e deixa a transcrição até 2x mais lenta.
+    /// </summary>
+    private static readonly TimeSpan MinimumCutPause = TimeSpan.FromSeconds(10);
+
+    /// <summary>Fala que o VAD precisa ouvir depois da última palavra de uma fatia para ela ser processada de novo.</summary>
+    private static readonly TimeSpan MinimumSkippedSpeech = TimeSpan.FromSeconds(2);
 
     private readonly ILogger<WhisperNetTranscriber> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -72,7 +109,7 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
     public WhisperNetTranscriber(ILogger<WhisperNetTranscriber> logger)
     {
         _logger = logger;
-        ConfigureRuntimeOnce();
+        WhisperRuntime.EnsureConfigured();
     }
 
     public async IAsyncEnumerable<RecognizedSegment> TranscribeAsync(
@@ -100,39 +137,48 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
             while (audio.Duration - offset >= MinimumRemainder)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var window = SliceWindow(audio, offset);
-                var windowEnd = offset + TimeSpan.FromSeconds((double)window.Length / audio.SampleRate);
-
-                var encoderRuns = 0;
-                var builder = factory.CreateBuilder()
-                    .WithLanguage(language)
-                    .WithTokenTimestamps()
-                    .WithThreads(Math.Clamp(Environment.ProcessorCount - 1, 1, 8))
-                    .WithEncoderBeginHandler(_ => ++encoderRuns == 1); // só a primeira janela da fatia (ver o resumo)
-                if (context.Length > 0)
+                if (settings.Speech is { } speech)
                 {
-                    builder = builder.WithPrompt(context);
+                    if (SkipNonSpeech(speech, offset, audio.Duration) is not { } next)
+                    {
+                        break; // não há mais fala
+                    }
+
+                    offset = next;
+                }
+
+                var window = SliceWindow(audio, offset, SliceEnd(audio, offset, settings.Speech));
+                var windowEnd = offset + TimeSpan.FromSeconds((double)window.Length / audio.SampleRate);
+                var slice = await DecodeSliceAsync(factory, window, offset, windowEnd, language, context, cancellationToken);
+                if (context.Length > 0 && RepetitionDetector.IsRepetitive(TextOf(slice)))
+                {
+                    // Laço de repetição: o texto anterior (prompt) costuma prender o modelo no ciclo.
+                    var retry = await DecodeSliceAsync(factory, window, offset, windowEnd, language, string.Empty, cancellationToken);
+                    var before = RepetitionDetector.CompressionRatio(TextOf(slice));
+                    var after = RepetitionDetector.CompressionRatio(TextOf(retry));
+                    LogRepetition(_logger, offset, before, after);
+                    slice = after < before ? retry : slice;
                 }
 
                 var lastEnd = offset;
-                await using (var processor = builder.Build())
+                foreach (var recognized in slice)
                 {
-                    await foreach (var segment in processor.ProcessAsync(window, cancellationToken))
+                    if (language == TranscriptionLanguages.Auto && !string.IsNullOrWhiteSpace(recognized.Language))
                     {
-                        var recognized = Map(segment, offset, windowEnd);
-                        if (language == TranscriptionLanguages.Auto && !string.IsNullOrWhiteSpace(segment.Language))
-                        {
-                            language = segment.Language; // fixa o idioma detectado para as próximas janelas
-                        }
-
-                        context = Tail(context + recognized.Text, PromptCharacters);
-                        lastEnd = recognized.End > lastEnd ? recognized.End : lastEnd;
-                        yield return recognized;
+                        language = recognized.Language; // fixa o idioma detectado para as próximas janelas
                     }
+
+                    if (!NonSpeechText.IsAnnotationOnly(recognized.Text))
+                    {
+                        // Com [BLANK_AUDIO] no prompt, o modelo passa a responder [BLANK_AUDIO] por cima da fala.
+                        context = Tail(context + recognized.Text, PromptCharacters);
+                    }
+
+                    lastEnd = recognized.End > lastEnd ? recognized.End : lastEnd;
+                    yield return recognized;
                 }
 
-                // Avança até o fim do último trecho; janela sem fala (ou sem progresso) é pulada inteira.
-                offset = lastEnd > offset ? lastEnd : windowEnd;
+                offset = NextOffset(slice, offset, windowEnd, lastEnd, settings.Speech);
             }
         }
         finally
@@ -202,6 +248,88 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
             UseFlashAttention = false, // o DTW exige flash attention desligado
         });
 
+    /// <summary>
+    /// Processa uma fatia (só a primeira janela; ver o resumo). Os trechos chegam todos no fim, depois do DTW,
+    /// então juntá-los numa lista não atrasa nada.
+    /// </summary>
+    private static async Task<List<RecognizedSegment>> DecodeSliceAsync(
+        WhisperFactory factory,
+        ReadOnlyMemory<float> window,
+        TimeSpan offset,
+        TimeSpan windowEnd,
+        string language,
+        string prompt,
+        CancellationToken cancellationToken)
+    {
+        var encoderRuns = 0;
+        var builder = factory.CreateBuilder()
+            .WithLanguage(language)
+            .WithTokenTimestamps()
+            .WithThreads(Math.Clamp(Environment.ProcessorCount - 1, 1, 8))
+            .WithEncoderBeginHandler(_ => ++encoderRuns == 1); // só a primeira janela da fatia (ver o resumo)
+        if (prompt.Length > 0)
+        {
+            builder = builder.WithPrompt(prompt);
+        }
+
+        var segments = new List<RecognizedSegment>();
+        await using var processor = builder.Build();
+        await foreach (var segment in processor.ProcessAsync(window, cancellationToken))
+        {
+            segments.Add(Map(segment, offset, windowEnd));
+        }
+
+        return segments;
+    }
+
+    /// <summary>
+    /// De onde a próxima fatia começa, pulando o trecho sem fala (ver o resumo), ou <c>null</c> se não houver
+    /// mais fala para transcrever.
+    /// </summary>
+    private TimeSpan? SkipNonSpeech(SpeechActivity speech, TimeSpan offset, TimeSpan duration)
+    {
+        if (speech.NextSpeechFrom(offset, SpeechLeadIn) is not { } next)
+        {
+            LogSkipped(_logger, offset, duration);
+            return null;
+        }
+
+        if (next - offset < MinimumSkip)
+        {
+            return offset; // pausa curta: segue de onde estava
+        }
+
+        LogSkipped(_logger, offset, next);
+        return duration - next >= MinimumRemainder ? next : null;
+    }
+
+    /// <summary>
+    /// Onde a próxima fatia começa: no fim do último trecho (janela sem fala, ou sem progresso, é pulada inteira).
+    /// Exceção: se o último trecho termina bem depois da sua última palavra e o VAD ouviu fala nessa sobra, o modelo
+    /// pulou fala, e a próxima fatia começa no fim da última palavra (ver o resumo).
+    /// </summary>
+    private TimeSpan NextOffset(
+        List<RecognizedSegment> slice, TimeSpan offset, TimeSpan windowEnd, TimeSpan lastEnd, SpeechActivity? speech)
+    {
+        if (lastEnd <= offset)
+        {
+            return windowEnd;
+        }
+
+        if (speech is not null && slice.Count > 0
+            && TokenWordMerger.LastAlignedWordEnd(slice[^1]) is { } wordEnd
+            && wordEnd > offset + MinimumRemainder
+            && speech.SpeechBetween(wordEnd, lastEnd) >= MinimumSkippedSpeech)
+        {
+            LogSkippedSpeech(_logger, wordEnd, lastEnd);
+            return wordEnd;
+        }
+
+        return lastEnd;
+    }
+
+    private static string TextOf(List<RecognizedSegment> segments) => string.Concat(segments.Select(s => s.Text));
+
     /// <summary>Cabeças de atenção usadas pelo DTW; os modelos .en têm as suas próprias.</summary>
     private static WhisperAlignmentHeadsPreset ToHeadsPreset(WhisperModelSize size, bool englishOnly) => (size, englishOnly) switch
     {
@@ -238,32 +366,35 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
             segment.Language);
     }
 
-    private static ReadOnlyMemory<float> SliceWindow(AudioSamples audio, TimeSpan offset)
+    /// <summary>
+    /// Fim da fatia: uma janela depois do início ou, com detecção de voz, o fim da fala contínua mais
+    /// <see cref="SpeechLeadIn"/>, se vier antes (ver o resumo). Nunca menos que <see cref="MinimumRemainder"/>.
+    /// </summary>
+    private static TimeSpan SliceEnd(AudioSamples audio, TimeSpan offset, SpeechActivity? speech)
+    {
+        var end = offset + WindowLength < audio.Duration ? offset + WindowLength : audio.Duration;
+        // Com a mesma folga de SkipNonSpeech: um início logo depois do fim de uma fala ainda pertence a ela.
+        if (speech?.EndOfSpeechFrom(offset - SpeechLeadIn, MinimumCutPause, end) is not { } speechEnd)
+        {
+            return end;
+        }
+
+        var trimmed = speechEnd + SpeechLeadIn;
+        var minimum = offset + MinimumRemainder;
+        return trimmed < minimum ? minimum : trimmed < end ? trimmed : end;
+    }
+
+    private static ReadOnlyMemory<float> SliceWindow(AudioSamples audio, TimeSpan offset, TimeSpan end)
     {
         var start = (int)Math.Min(audio.Samples.Length, Math.Round(offset.TotalSeconds * audio.SampleRate));
-        var length = (int)Math.Min(audio.Samples.Length - start, WindowLength.TotalSeconds * audio.SampleRate);
-        return audio.Samples.Slice(start, length);
+        var length = (int)Math.Min(audio.Samples.Length - start, Math.Round((end - offset).TotalSeconds * audio.SampleRate));
+        return audio.Samples.Slice(start, Math.Max(0, length));
     }
 
     private static string Tail(string text, int maxLength) =>
         text.Length <= maxLength ? text : text[^maxLength..];
 
     private static TimeSpan FromWhisperUnits(long value) => TimeSpan.FromTicks(Math.Max(0, value) * TicksPerWhisperUnit);
-
-    /// <summary>Ordem de carregamento dos runtimes nativos; precisa ser definida antes da primeira factory.</summary>
-    private static void ConfigureRuntimeOnce()
-    {
-        lock (RuntimeConfigurationLock)
-        {
-            if (_runtimeConfigured)
-            {
-                return;
-            }
-
-            RuntimeOptions.RuntimeLibraryOrder = [RuntimeLibrary.Vulkan, RuntimeLibrary.Cpu, RuntimeLibrary.CpuNoAvx];
-            _runtimeConfigured = true;
-        }
-    }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Transcrevendo {Duration} com modelo {ModelSize}, idioma {Language}")]
     private static partial void LogStarted(ILogger logger, TimeSpan duration, WhisperModelSize modelSize, string language);
@@ -273,6 +404,16 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "A transcrição não parou em {Timeout}; o modelo não será liberado")]
     private static partial void LogDisposeTimedOut(ILogger logger, TimeSpan timeout);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Repetição em {Offset} (razão de compressão {Before:F1}); sem o prompt: {After:F1}")]
+    private static partial void LogRepetition(ILogger logger, TimeSpan offset, double before, double after);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "O modelo pulou fala entre {From} e {To}; a próxima fatia recomeça em {From}")]
+    private static partial void LogSkippedSpeech(ILogger logger, TimeSpan from, TimeSpan to);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Sem fala de {From} a {To}: trecho pulado")]
+    private static partial void LogSkipped(ILogger logger, TimeSpan from, TimeSpan to);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Falha ao iniciar com GPU; usando CPU")]
     private static partial void LogGpuFallback(ILogger logger, Exception exception);

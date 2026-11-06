@@ -21,6 +21,7 @@ public static class DependencyInjection
 
         services.AddSingleton<IAudioPlayer, NAudioPlayer>();
         services.AddSingleton<IAudioDecoder, AudioFileDecoder>();
+        services.AddSingleton<ISpeechDetector, SileroSpeechDetector>();
         services.AddSingleton<ITranscriber, WhisperNetTranscriber>();
         services.AddSingleton<ISubtitleStore, TxtSubtitleStore>();
         services.AddSingleton<ISettingsStore, JsonSettingsStore>();

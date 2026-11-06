@@ -14,6 +14,11 @@ public sealed record InfrastructureOptions
     /// <summary>Pasta dos logs.</summary>
     public required string LogsDirectory { get; init; }
 
+    /// <summary>Modelo do detector de voz (Silero VAD), que vai junto com o app, ao lado do executável.</summary>
+    public string SpeechModelPath { get; init; } = DefaultSpeechModelPath;
+
+    private static string DefaultSpeechModelPath => Path.Combine(AppContext.BaseDirectory, "vad", "ggml-silero-v6.2.0.bin");
+
     public static InfrastructureOptions CreateDefault()
     {
         var local = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppFolderName);

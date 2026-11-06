@@ -4,7 +4,7 @@ namespace LessonsPlayer.Core.Transcription;
 /// Marcações de não fala que o Whisper escreve no lugar de texto, como <c>[BLANK_AUDIO]</c> (silêncio),
 /// <c>[Music]</c>, <c>(risos)</c> ou <c>♪♪</c>. Não são palavras ditas e não devem virar legenda.
 /// </summary>
-internal static class NonSpeechText
+public static class NonSpeechText
 {
     /// <summary>
     /// Indica se o texto não tem nenhuma letra ou dígito fora de colchetes e parênteses

@@ -44,7 +44,7 @@ public sealed class TranscriberShutdownTests : IDisposable
         using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         var models = new HuggingFaceModelStore(http, InfrastructureOptions.CreateDefault(), NullLogger<HuggingFaceModelStore>.Instance);
         var transcriber = new WhisperNetTranscriber(NullLogger<WhisperNetTranscriber>.Instance);
-        var generator = new SubtitleGenerator(models, new AudioFileDecoder(), transcriber, TimeProvider.System);
+        var generator = new SubtitleGenerator(models, new AudioFileDecoder(), TestSpeechDetector.Create(), transcriber, TimeProvider.System);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
         var progressed = new TaskCompletionSource();

@@ -89,7 +89,7 @@ public sealed class SentenceSegmentationTests : IDisposable
         using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         var models = new HuggingFaceModelStore(
             http, InfrastructureOptions.CreateDefault(), NullLogger<HuggingFaceModelStore>.Instance);
-        var generator = new SubtitleGenerator(models, new AudioFileDecoder(), transcriber, TimeProvider.System);
+        var generator = new SubtitleGenerator(models, new AudioFileDecoder(), TestSpeechDetector.Create(), transcriber, TimeProvider.System);
 
         return await generator.GenerateAsync(
             audioPath, new TranscriptionOptions(model, "en", UseGpu: true), progress: null, ct);

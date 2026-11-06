@@ -30,7 +30,7 @@ public sealed class TranscriptionViewModelTests
             .ReturnsForAnyArgs(new AudioSamples(new float[AudioSamples.SpeechSampleRate * 2], AudioSamples.SpeechSampleRate));
 
         _vm = new TranscriptionViewModel(
-            new SubtitleGenerator(models, decoder, _transcriber, TimeProvider.System),
+            new SubtitleGenerator(models, decoder, Substitute.For<ISpeechDetector>(), _transcriber, TimeProvider.System),
             _subtitles, models, _dialogs, new AppSettingsService(_settingsStore),
             NullLogger<TranscriptionViewModel>.Instance)
         {
