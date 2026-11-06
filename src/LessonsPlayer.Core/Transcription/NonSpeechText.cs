@@ -1,8 +1,13 @@
 namespace LessonsPlayer.Core.Transcription;
 
 /// <summary>
-/// Marcações de não fala que o Whisper escreve no lugar de texto, como <c>[BLANK_AUDIO]</c> (silêncio),
-/// <c>[Music]</c>, <c>(risos)</c> ou <c>♪♪</c>. Não são palavras ditas e não devem virar legenda.
+/// Marcações de não fala que o Whisper escreve no lugar de texto. Não são palavras ditas e não devem virar legenda.
+/// <para>
+/// Vistas nas nossas legendas (Whisper.net 1.9.1, small/small.en/base): <c>[BLANK_AUDIO]</c> (silêncio),
+/// <c>[Music]</c>, <c>[MUSIC PLAYING]</c>, <c>[ Silence ]</c>, <c>[static]</c>, <c>[typing sounds]</c>. Entre
+/// parênteses ou com ♪ ainda não apareceram, mas são tratadas igual: o whisper.cpp lista <c>(</c>, <c>)</c> e
+/// <c>♪</c> entre os tokens de não fala da opção <c>suppress_nst</c> (desligada e não exposta pelo Whisper.net).
+/// </para>
 /// </summary>
 public static class NonSpeechText
 {
