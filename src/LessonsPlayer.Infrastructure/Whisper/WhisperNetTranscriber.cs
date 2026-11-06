@@ -26,6 +26,18 @@ namespace LessonsPlayer.Infrastructure.Whisper;
 /// as seguintes, e o texto anterior vai como prompt, para manter o contexto.
 /// </para>
 /// <para>
+/// <b>Uma janela por chamada:</b> depois da primeira janela, o whisper.cpp seguiria com a sobra da fatia (do fim
+/// do último trecho até o fim da fatia). Os trechos dessa sobra não chegam ao Whisper.net (mesmo bug do callback),
+/// e a fatia seguinte processa esse áudio de novo. Por isso o encoder é interrompido antes da segunda janela.
+/// Além de economizar uma passada por fatia, isso evita um abort nativo: em sobras de até ~150 ms, o filtro
+/// mediano do DTW falha em <c>WHISPER_ASSERT(filter_width &lt; a-&gt;ne[2])</c>
+/// (<c>median_filter</c> no whisper.cpp do Whisper.net 1.9.1; corrigido depois no whisper.cpp) e derruba o
+/// processo. Medido em aulas TTS de 1,5 a 2,5 min (4 modelos, 3 áudios): mesmos trechos e tempos, e transcrição
+/// mais rápida em 11 de 12 casos (medium: 45 s → 22 s). Num experimento sem prompt, o abort acontecia na sobra
+/// da 3ª fatia e deixou de acontecer com a interrupção. O log nativo
+/// <c>"encoder_begin_callback returned false - aborting"</c>, de nível erro, é esperado a cada fatia.
+/// </para>
+/// <para>
 /// <b>Descarte:</b> liberar o modelo enquanto o whisper.cpp ainda calcula derruba o processo (0xC0000005 em
 /// ggml-cpu-whisper.dll; acontecia ao fechar o app durante uma geração na CPU). Por isso <see cref="Dispose"/>
 /// cancela o trabalho em andamento e espera ele terminar antes de liberar o modelo.
@@ -91,10 +103,12 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
                 var window = SliceWindow(audio, offset);
                 var windowEnd = offset + TimeSpan.FromSeconds((double)window.Length / audio.SampleRate);
 
+                var encoderRuns = 0;
                 var builder = factory.CreateBuilder()
                     .WithLanguage(language)
                     .WithTokenTimestamps()
-                    .WithThreads(Math.Clamp(Environment.ProcessorCount - 1, 1, 8));
+                    .WithThreads(Math.Clamp(Environment.ProcessorCount - 1, 1, 8))
+                    .WithEncoderBeginHandler(_ => ++encoderRuns == 1); // só a primeira janela da fatia (ver o resumo)
                 if (context.Length > 0)
                 {
                     builder = builder.WithPrompt(context);
