@@ -28,6 +28,11 @@ public partial class TranscriptView : UserControl
     public TranscriptView()
     {
         InitializeComponent();
+
+        // Destino do foco ao clicar fora de uma palavra em edição (ver OnPreviewMouseDown); fora da ordem de Tab.
+        Focusable = true;
+        IsTabStop = false;
+        FocusVisualStyle = null;
         DataContextChanged += OnDataContextChanged;
         SegmentList.AddHandler(PreviewMouseWheelEvent, new MouseWheelEventHandler((_, _) => MarkManualScroll()), handledEventsToo: true);
         SegmentList.AddHandler(ScrollBar.ScrollEvent, new ScrollEventHandler((_, _) => MarkManualScroll()), handledEventsToo: true);
@@ -45,12 +50,13 @@ public partial class TranscriptView : UserControl
 
         // Clique fora de uma palavra (área vazia, horário do trecho) confirma a edição em andamento: nada ali
         // pega o foco, então a caixa de texto nunca o perderia. Clique em outra palavra já confirma pelo comando.
+        // O foco vai para esta view: a janela não serve, porque é um escopo de foco e o devolveria à caixa.
         if (Keyboard.FocusedElement is TextBox editing
             && editing.IsDescendantOf(this)
             && FindAncestor<TextBox>(source) is null
             && !IsOnWord(source))
         {
-            Window.GetWindow(this)?.Focus();
+            Focus();
         }
     }
 

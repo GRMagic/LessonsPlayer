@@ -24,7 +24,8 @@
                 AutomationProperties.Name="{x:Static res:UiText.Redo}">
           <TextBlock Style="{StaticResource Icon}" Text="{StaticResource GlyphRedo}" />
         </Button>
-        <Button Style="{StaticResource FlatButton}" Command="{Binding SaveCommand}" ToolTip="Ctrl+S">
+        <Button Style="{StaticResource FlatButton}" Command="{Binding SaveCommand}" ToolTip="Ctrl+S"
+                AutomationProperties.Name="{x:Static res:UiText.Save}">
           <StackPanel Orientation="Horizontal">
             <TextBlock Style="{StaticResource Icon}" Text="{StaticResource GlyphSave}" />
             <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" Text="{x:Static res:UiText.Save}" />
