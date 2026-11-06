@@ -71,8 +71,13 @@ public static class TokenWordMerger
             words.Add(new Word(starts[i], end, textWords[i]));
         }
 
-        return new Segment(words.MoveToImmutable());
+        // ">>" marca troca de falante nas legendas com que o Whisper foi treinado (aparece em conversas e
+        // entrevistas); não é palavra dita e não deve virar palavra clicável no karaokê.
+        var spoken = words.MoveToImmutable().RemoveAll(w => IsSpeakerTurnMarker(w.Text));
+        return spoken.IsEmpty ? null : new Segment(spoken);
     }
+
+    private static bool IsSpeakerTurnMarker(string word) => word.All(c => c == '>');
 
     /// <summary>Tokens especiais do whisper.cpp: <c>[_BEG_]</c>, <c>[_TT_123]</c>, <c>&lt;|en|&gt;</c> etc.</summary>
     internal static bool IsSpecialToken(string text)

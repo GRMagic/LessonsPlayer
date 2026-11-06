@@ -217,7 +217,8 @@ public sealed class RealAudioComparisonTests
         new string([.. word.Where(c => char.IsLetterOrDigit(c) || c is '\'' or '’').Select(c => c == '’' ? '\'' : c)])
             .ToLower(CultureInfo.InvariantCulture);
 
-    private static bool EndsSentence(string text) => text.TrimEnd().TrimEnd('"', '”', '\'', ')').EndsWith(['.', '?', '!']);
+    private static bool EndsSentence(string text) =>
+        text.TrimEnd().TrimEnd('"', '”', '\'', ')') is { Length: > 0 } t && t[^1] is '.' or '?' or '!' or '…';
 
     private static List<Cue> ReadCues(string path) =>
         [.. ReadTsv(path).Where(c => c.Length >= 3).Select(c => new Cue(Ms(c[0]), Ms(c[1]), c[2]))];

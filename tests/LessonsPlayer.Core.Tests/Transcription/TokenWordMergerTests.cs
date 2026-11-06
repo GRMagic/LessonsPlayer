@@ -50,6 +50,15 @@ public sealed class TokenWordMergerTests
         TokenWordMerger.ToSegment(segment).ShouldBeNull();
     }
 
+    /// <summary>Visto na entrevista da NASA (áudio real do YouTube): 22 marcadores "&gt;&gt;" viravam palavras.</summary>
+    [Fact]
+    public void Speaker_turn_markers_are_not_words()
+    {
+        var segment = SegmentOf(0, 1500, " >> Quite honestly", Token(" >>", 0, 200), Token(" Quite", 200, 700), Token(" honestly", 700, 1400));
+
+        TokenWordMerger.ToSegment(segment)!.Words.Select(w => (w.Text, w.Start)).ShouldBe([("Quite", Ms(200)), ("honestly", Ms(700))]);
+    }
+
     [Fact]
     public void Segment_with_speech_and_an_annotation_is_kept()
     {
