@@ -18,12 +18,16 @@ namespace LessonsPlayer.Core.Transcription;
 /// </summary>
 public static class TokenWordMerger
 {
+    /// <summary>
+    /// Monta o trecho de palavras. Retorna <c>null</c> se não houver fala: texto vazio ou só marcações
+    /// como <c>[BLANK_AUDIO]</c> (ver <see cref="NonSpeechText"/>).
+    /// </summary>
     public static Segment? ToSegment(RecognizedSegment segment)
     {
         ArgumentNullException.ThrowIfNull(segment);
 
         var textWords = TextTokens.Split(segment.Text);
-        if (textWords.Length == 0)
+        if (textWords.Length == 0 || NonSpeechText.IsAnnotationOnly(segment.Text))
         {
             return null;
         }

@@ -21,7 +21,7 @@ public sealed class AudioFileDecoder : IAudioDecoder
 
     private static AudioSamples Decode(string filePath, CancellationToken cancellationToken)
     {
-        using var reader = new AudioFileReader(filePath);
+        using var reader = AudioFiles.OpenReader(filePath);
         ISampleProvider mono = reader.WaveFormat.Channels == 1 ? reader : new MonoDownmixSampleProvider(reader);
         ISampleProvider resampled = mono.WaveFormat.SampleRate == AudioSamples.SpeechSampleRate
             ? mono

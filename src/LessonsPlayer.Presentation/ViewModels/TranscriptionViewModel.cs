@@ -48,6 +48,7 @@ public sealed partial class TranscriptionViewModel : ObservableObject
     private readonly ILogger<TranscriptionViewModel> _logger;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanChooseLanguage))]
     private ModelOption _selectedModel;
 
     [ObservableProperty]
@@ -71,10 +72,13 @@ public sealed partial class TranscriptionViewModel : ObservableObject
 
     /// <summary>
     /// Há uma geração em andamento. É um estado próprio, e não <c>GenerateCommand.IsRunning</c>: o comando só
-    /// passa a "rodando" depois que o método retorna a Task, tarde demais para notificar a UI no início.
+    /// passa a "rodando" depois que o método retorna a Task (tarde demais para notificar a UI no início) e
+    /// só deixa de rodar depois do <c>finally</c>, quando o botão já voltou a aparecer. Por isso o comando
+    /// permite execuções concorrentes e quem impede duas gerações é este estado (<see cref="CanGenerate"/>).
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsIdle))]
+    [NotifyPropertyChangedFor(nameof(IsIdle), nameof(CanChooseLanguage))]
+    [NotifyCanExecuteChangedFor(nameof(GenerateCommand))]
     private bool _isRunning;
 
     public TranscriptionViewModel(
@@ -110,9 +114,12 @@ public sealed partial class TranscriptionViewModel : ObservableObject
 
     public bool IsIdle => !IsRunning;
 
-    private bool CanGenerate => TargetAudioFilePath is not null;
+    /// <summary>Modelos .en só transcrevem inglês: o idioma escolhido não se aplica a eles.</summary>
+    public bool CanChooseLanguage => IsIdle && !SelectedModel.Model.EnglishOnly;
 
-    [RelayCommand(CanExecute = nameof(CanGenerate), IncludeCancelCommand = true)]
+    private bool CanGenerate => TargetAudioFilePath is not null && !IsRunning;
+
+    [RelayCommand(CanExecute = nameof(CanGenerate), IncludeCancelCommand = true, AllowConcurrentExecutions = true)]
     private async Task GenerateAsync(CancellationToken cancellationToken)
     {
         if (TargetAudioFilePath is not { } audioPath)
@@ -135,10 +142,16 @@ public sealed partial class TranscriptionViewModel : ObservableObject
         {
             var transcript = await Task.Run(
                 () => _generator.GenerateAsync(audioPath, options, progress, cancellationToken), cancellationToken);
-            await _subtitleStore.SaveAsync(audioPath, transcript, cancellationToken);
-
-            StatusText = UiText.TranscriptionFinished(stopwatch.Elapsed, transcript.WordCount);
             SelectedModel.IsDownloaded = true;
+            if (transcript.WordCount == 0)
+            {
+                // Silêncio ou só ruído: uma legenda vazia não ajuda e apagaria a anterior, se houver.
+                StatusText = UiText.NoSpeechFound(fileName);
+                return;
+            }
+
+            await _subtitleStore.SaveAsync(audioPath, transcript, cancellationToken);
+            StatusText = UiText.TranscriptionFinished(fileName, stopwatch.Elapsed, transcript.WordCount);
             Completed?.Invoke(this, new TranscriptionCompletedEventArgs(audioPath, transcript));
         }
         catch (OperationCanceledException)
@@ -150,7 +163,7 @@ public sealed partial class TranscriptionViewModel : ObservableObject
             // Falhas esperadas aqui: rede, disco, formato de áudio, runtime nativo do Whisper.
             LogFailed(_logger, ex, audioPath);
             StatusText = null;
-            _dialogs.ShowError(UiText.ErrorTitle, UiText.TranscriptionFailed(ex.Message));
+            _dialogs.ShowError(UiText.ErrorTitle, UiText.TranscriptionFailed(UiText.ErrorReason(ex)));
         }
         finally
         {
@@ -166,6 +179,15 @@ public sealed partial class TranscriptionViewModel : ObservableObject
             || (value.Stage == TranscriptionStage.DownloadingModel && value.Fraction >= 1);
         Progress = value.Fraction;
         StatusText = UiText.Progress(value);
+    }
+
+    /// <summary>A mensagem da última geração não vale para outra faixa (a não ser que ainda esteja rodando).</summary>
+    partial void OnTargetAudioFilePathChanged(string? value)
+    {
+        if (!IsRunning)
+        {
+            StatusText = null;
+        }
     }
 
     partial void OnSelectedModelChanged(ModelOption value) =>

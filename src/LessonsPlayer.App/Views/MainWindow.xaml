@@ -51,7 +51,10 @@
 
           <TextBlock Style="{StaticResource Muted}" Margin="12,0,6,0" Text="{x:Static res:UiText.Language}" />
           <ComboBox ItemsSource="{Binding Languages}" SelectedItem="{Binding SelectedLanguage}"
-                    DisplayMemberPath="Name" MinWidth="170" IsEnabled="{Binding IsIdle}" />
+                    DisplayMemberPath="Name" MinWidth="170" IsEnabled="{Binding CanChooseLanguage}"
+                    ToolTip="{x:Static res:UiText.EnglishOnlyModelHint}"
+                    ToolTipService.ShowOnDisabled="True"
+                    ToolTipService.IsEnabled="{Binding SelectedModel.Model.EnglishOnly}" />
 
           <CheckBox Margin="12,0" Content="{x:Static res:UiText.UseGpu}" IsChecked="{Binding UseGpu}"
                     ToolTip="{x:Static res:UiText.UseGpuHint}" IsEnabled="{Binding IsIdle}" />
@@ -142,7 +145,9 @@
         <StackPanel Grid.Column="4" Orientation="Horizontal" ToolTip="{x:Static res:UiText.VolumeHint}">
           <TextBlock Style="{StaticResource Icon}" Foreground="{StaticResource MutedTextBrush}" Text="{StaticResource GlyphVolume}" />
           <Slider Width="100" Margin="8,0,0,0" VerticalAlignment="Center" Focusable="False"
-                  Minimum="0" Maximum="1" Value="{Binding Volume}" />
+                  AutomationProperties.Name="{x:Static res:UiText.VolumeHint}"
+                  Minimum="0" Maximum="1" SmallChange="0.05" LargeChange="0.1" IsMoveToPointEnabled="True"
+                  Value="{Binding Volume}" />
         </StackPanel>
       </Grid>
     </Border>
@@ -163,6 +168,12 @@
             <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}"
                      BorderThickness="0" Background="Transparent" Padding="4,0"
                      HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              <ListBox.ItemContainerStyle>
+                <!-- Sem isso, leitores de tela anunciam o nome da classe do ViewModel. -->
+                <Style TargetType="{x:Type ListBoxItem}">
+                  <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
+                </Style>
+              </ListBox.ItemContainerStyle>
               <ListBox.InputBindings>
                 <KeyBinding Key="Enter" CommandParameter="{Binding SelectedItem}"
                             Command="{Binding DataContext.PlayItemCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" />

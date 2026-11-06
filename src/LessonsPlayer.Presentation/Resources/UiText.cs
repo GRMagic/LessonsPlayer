@@ -1,4 +1,5 @@
 using System.Globalization;
+using LessonsPlayer.Core.Audio;
 using LessonsPlayer.Core.Subtitles;
 using LessonsPlayer.Core.Transcription;
 
@@ -21,6 +22,7 @@ public static class UiText
     public const string Language = "Idioma";
     public const string UseGpu = "Usar GPU";
     public const string UseGpuHint = "Usa a placa de vídeo quando disponível (Vulkan); sem ela, usa a CPU.";
+    public const string EnglishOnlyModelHint = "Os modelos .en transcrevem só inglês; o idioma não se aplica.";
 
     // --- Player ---
     public const string Play = "Tocar";
@@ -64,6 +66,15 @@ public static class UiText
 
     public const string LanguageAuto = "Detectar automaticamente";
 
+    public const string UnsupportedAudioFile = "O arquivo não é um áudio suportado ou está danificado.";
+
+    /// <summary>Motivo de uma falha para mostrar ao usuário (as mensagens do sistema vêm em inglês).</summary>
+    public static string ErrorReason(Exception exception) => exception switch
+    {
+        UnsupportedAudioFileException => UnsupportedAudioFile,
+        _ => exception.Message,
+    };
+
     public static string WindowTitle(string? fileName, bool isDirty) =>
         fileName is null ? AppName : $"{(isDirty ? "• " : string.Empty)}{fileName} — {AppName}";
 
@@ -95,8 +106,11 @@ public static class UiText
         _ => string.Create(CultureInfo.CurrentCulture, $"Transcrevendo… {progress.Fraction:P0}"),
     };
 
-    public static string TranscriptionFinished(TimeSpan elapsed, int words) =>
-        string.Create(CultureInfo.CurrentCulture, $"Legenda gerada em {elapsed:m\\:ss} ({words} palavras).");
+    public static string TranscriptionFinished(string fileName, TimeSpan elapsed, int words) =>
+        string.Create(CultureInfo.CurrentCulture, $"Legenda de \"{fileName}\" gerada em {elapsed:m\\:ss} ({words} palavras).");
+
+    public static string NoSpeechFound(string fileName) =>
+        $"Nenhuma fala reconhecida em \"{fileName}\"; a legenda não foi salva.";
 
     public const string TranscriptionCanceled = "Geração da legenda cancelada.";
 

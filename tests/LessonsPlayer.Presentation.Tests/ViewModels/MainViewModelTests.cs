@@ -102,6 +102,32 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public async Task Canceling_a_track_switch_puts_the_selection_back_on_the_current_track()
+    {
+        await _vm.OpenPathsAsync([@"C:ulas"]);
+        _vm.Transcript.DeleteWordCommand.Execute(_vm.Transcript.Segments[0].Words[0]);
+        _dialogs.AskSaveChanges(default!).ReturnsForAnyArgs(SaveChangesChoice.Cancel);
+        var other = _vm.Playlist.Items[1];
+        _vm.Playlist.SelectedItem = other; // o clique na lista seleciona antes do duplo clique pedir a troca
+
+        await _vm.PlayItemCommand.ExecuteAsync(other);
+
+        _vm.Playlist.SelectedItem.ShouldBe(_vm.Playlist.CurrentItem);
+        _vm.Playlist.CurrentItem!.FilePath.ShouldBe(Aula1);
+    }
+
+    [Fact]
+    public async Task Saving_confirms_in_the_status_bar()
+    {
+        await _vm.OpenPathsAsync([@"C:ulas"]);
+        _vm.Transcript.DeleteWordCommand.Execute(_vm.Transcript.Segments[0].Words[0]);
+
+        await _vm.Transcript.SaveAsync(TestContext.Current.CancellationToken);
+
+        _vm.StatusMessage.ShouldBe(Resources.UiText.Saved(_subtitles.GetSubtitlePath(Aula1)));
+    }
+
+    [Fact]
     public async Task Switching_track_with_unsaved_edits_and_save_persists_then_switches()
     {
         await _vm.OpenPathsAsync([@"C:\aulas"]);
@@ -134,7 +160,8 @@ public sealed class MainViewModelTests
 
         await _vm.OpenPathsAsync([@"C:\aulas"]);
 
-        _dialogs.ReceivedWithAnyArgs(1).ShowError(default!, default!);
+        // A mensagem do Media Foundation vem em inglês; o usuário vê o texto do app.
+        _dialogs.Received(1).ShowError(Arg.Any<string>(), Arg.Is<string>(m => m.Contains(Resources.UiText.UnsupportedAudioFile)));
         _vm.Playlist.CurrentItem.ShouldBeNull();
         _vm.Transcription.TargetAudioFilePath.ShouldBeNull();
     }

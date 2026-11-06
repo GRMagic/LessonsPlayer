@@ -45,6 +45,9 @@ public sealed partial class TranscriptViewModel(
     /// <summary>A legenda mudou (edição, desfazer, salvar). Útil para atualizar o título da janela.</summary>
     public event EventHandler? Changed;
 
+    /// <summary>A legenda foi gravada; o argumento é o caminho do arquivo de legenda.</summary>
+    public event EventHandler<string>? Saved;
+
     public ObservableCollection<SegmentViewModel> Segments { get; } = [];
 
     public bool HasTranscript => Segments.Count > 0;
@@ -112,6 +115,7 @@ public sealed partial class TranscriptViewModel(
             await subtitleStore.SaveAsync(AudioFilePath, _editor.Current, cancellationToken);
             _editor.MarkSaved();
             LogSaved(logger, AudioFilePath);
+            Saved?.Invoke(this, subtitleStore.GetSubtitlePath(AudioFilePath));
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

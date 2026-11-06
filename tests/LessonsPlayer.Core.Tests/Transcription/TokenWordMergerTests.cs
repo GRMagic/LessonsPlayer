@@ -35,6 +35,29 @@ public sealed class TokenWordMergerTests
         ]);
     }
 
+    [Theory]
+    [InlineData(" [BLANK_AUDIO]")]
+    [InlineData(" [ Silence ]")]
+    [InlineData(" [Music]")]
+    [InlineData(" (risos)")]
+    [InlineData(" ♪ ♪")]
+    [InlineData(" ...")]
+    public void Segment_without_speech_is_dropped(string text)
+    {
+        // O Whisper escreve "[BLANK_AUDIO]" para silêncio; isso não é palavra dita.
+        var segment = SegmentOf(0, 15000, text, Token(text, 0, 15000));
+
+        TokenWordMerger.ToSegment(segment).ShouldBeNull();
+    }
+
+    [Fact]
+    public void Segment_with_speech_and_an_annotation_is_kept()
+    {
+        var segment = SegmentOf(0, 1000, " (risos) Bom dia", Token(" (risos)", 0, 300), Token(" Bom", 300, 600), Token(" dia", 600, 1000));
+
+        TokenWordMerger.ToSegment(segment).ShouldNotBeNull();
+    }
+
     [Fact]
     public void Word_text_comes_from_segment_text_not_from_broken_token_text()
     {

@@ -48,9 +48,10 @@ public sealed partial class MainViewModel : ObservableObject
 
         _frameTimer.Tick += (_, _) => OnFrame();
         Player.PlaybackCompleted += async (_, _) => await PlayNeighborAsync(Playlist.Next());
-        Player.PlaybackFailed += (_, e) => _dialogs.ShowError(UiText.ErrorTitle, UiText.PlaybackFailed(e.Exception.Message));
+        Player.PlaybackFailed += (_, e) => _dialogs.ShowError(UiText.ErrorTitle, UiText.PlaybackFailed(UiText.ErrorReason(e.Exception)));
         Transcript.SeekRequested += (_, position) => Player.Seek(position);
         Transcript.Changed += (_, _) => UpdateTitle();
+        Transcript.Saved += (_, subtitlePath) => StatusMessage = UiText.Saved(subtitlePath);
         Transcription.Completed += OnTranscriptionCompleted;
     }
 
@@ -150,8 +151,14 @@ public sealed partial class MainViewModel : ObservableObject
 
     private async Task PlayItemAsync(PlaylistItemViewModel? item, bool autoPlay, bool confirmLeave)
     {
-        if (item is null || (confirmLeave && !await ConfirmLeaveTranscriptAsync()))
+        if (item is null)
         {
+            return;
+        }
+
+        if (confirmLeave && !await ConfirmLeaveTranscriptAsync())
+        {
+            Playlist.SelectedItem = Playlist.CurrentItem; // desistiu de trocar: a seleção volta para a faixa atual
             return;
         }
 
@@ -164,7 +171,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             // Formato não suportado, arquivo corrompido ou sem dispositivo de áudio.
             LogOpenFailed(_logger, ex, item.FilePath);
-            _dialogs.ShowError(UiText.ErrorTitle, UiText.CannotOpen(item.FileName, ex.Message));
+            _dialogs.ShowError(UiText.ErrorTitle, UiText.CannotOpen(item.FileName, UiText.ErrorReason(ex)));
             Playlist.SetCurrent(null);
             Transcript.Load(null, null);
             Transcription.TargetAudioFilePath = null;

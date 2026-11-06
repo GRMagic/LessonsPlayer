@@ -79,6 +79,69 @@ public sealed class TranscriptionViewModelTests
         _vm.StatusText.ShouldNotBeNull();
     }
 
+    /// <summary>
+    /// Regressão: o botão volta a aparecer quando <c>IsRunning</c> fica falso; se o comando ainda contasse
+    /// como "executando" nesse instante, o botão aparecia desabilitado.
+    /// </summary>
+    [Fact]
+    public async Task Generate_command_is_enabled_as_soon_as_generation_ends()
+    {
+        bool? canExecuteWhenIdle = null;
+        _vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(TranscriptionViewModel.IsRunning) && !_vm.IsRunning)
+            {
+                canExecuteWhenIdle = _vm.GenerateCommand.CanExecute(null);
+            }
+        };
+
+        var running = _vm.GenerateCommand.ExecuteAsync(null);
+        await _transcriber.Started.WaitAsync(TestContext.Current.CancellationToken);
+        _vm.GenerateCommand.CanExecute(null).ShouldBeFalse("não pode gerar duas vezes ao mesmo tempo");
+
+        _transcriber.Release();
+        await running;
+
+        canExecuteWhenIdle.ShouldBe(true);
+    }
+
+    [Fact]
+    public async Task Result_without_speech_is_not_saved()
+    {
+        _transcriber.Text = " [BLANK_AUDIO]";
+        var completed = false;
+        _vm.Completed += (_, _) => completed = true;
+        _transcriber.Release();
+
+        await _vm.GenerateCommand.ExecuteAsync(null);
+
+        _subtitles.Saved.ShouldBeEmpty();
+        completed.ShouldBeFalse();
+        _vm.StatusText.ShouldBe(Resources.UiText.NoSpeechFound("aula1.mp3"));
+    }
+
+    [Fact]
+    public void Language_is_locked_for_english_only_models()
+    {
+        _vm.CanChooseLanguage.ShouldBeTrue();
+
+        _vm.SelectedModel = _vm.Models.Single(m => m.Model == WhisperModels.SmallEnglish);
+
+        _vm.CanChooseLanguage.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Status_of_a_finished_generation_is_cleared_when_the_track_changes()
+    {
+        _transcriber.Release();
+        await _vm.GenerateCommand.ExecuteAsync(null);
+        _vm.StatusText.ShouldNotBeNull();
+
+        _vm.TargetAudioFilePath = @"C:ulasula2.mp3";
+
+        _vm.StatusText.ShouldBeNull();
+    }
+
     [Fact]
     public void Options_are_restored_from_and_saved_to_settings()
     {
@@ -99,6 +162,8 @@ public sealed class TranscriptionViewModelTests
 
         public Task Started => _started.Task;
 
+        public string Text { get; set; } = " Pronto";
+
         public void Release() => _release.TrySetResult();
 
         public async IAsyncEnumerable<RecognizedSegment> TranscribeAsync(
@@ -106,7 +171,7 @@ public sealed class TranscriptionViewModelTests
         {
             _started.TrySetResult();
             await _release.Task.WaitAsync(cancellationToken);
-            yield return new RecognizedSegment(Ms(0), Ms(1000), " Pronto", []);
+            yield return new RecognizedSegment(Ms(0), Ms(1000), Text, []);
         }
     }
 }
