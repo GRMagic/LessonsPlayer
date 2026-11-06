@@ -44,9 +44,11 @@ public sealed partial class PlaylistViewModel(IPlaylistSource source, ISubtitleS
 
     public void LoadPaths(IReadOnlyCollection<string> paths)
     {
-        var name = paths.Count == 1 && Directory.Exists(paths.First())
-            ? Path.GetFileName(Path.TrimEndingDirectorySeparator(paths.First()))
-            : null;
+        // Uma pasta: o nome dela. Um arquivo avulso: o nome da pasta onde ele está (o cabeçalho ficava vazio).
+        var single = paths.Count == 1 ? Path.TrimEndingDirectorySeparator(paths.First()) : null;
+        var name = single is null ? null
+            : Directory.Exists(single) ? Path.GetFileName(single)
+            : Path.GetFileName(Path.GetDirectoryName(single));
         Replace(source.FromPaths(paths), name);
     }
 

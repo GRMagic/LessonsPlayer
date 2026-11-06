@@ -22,20 +22,29 @@ public sealed partial class ModelOption(WhisperModel model, bool isDownloaded) :
     public string Name => UiText.ModelName(Model);
 
     public string SizeText => UiText.ModelSize(Model, IsDownloaded);
+
+    /// <summary>Também é o nome lido pelos leitores de tela (antes, o nome da classe).</summary>
+    public override string ToString() => Name;
 }
 
 /// <summary>Opção de idioma na lista.</summary>
 public sealed record LanguageOption(string Code)
 {
     public string Name => UiText.LanguageName(Code);
+
+    /// <summary>Também é o nome lido pelos leitores de tela.</summary>
+    public override string ToString() => Name;
 }
 
 /// <summary>Argumentos de uma legenda recém-gerada (e já salva).</summary>
-public sealed class TranscriptionCompletedEventArgs(string audioFilePath, Transcript transcript) : EventArgs
+public sealed class TranscriptionCompletedEventArgs(string audioFilePath, Transcript transcript, bool isSaved = true) : EventArgs
 {
     public string AudioFilePath { get; } = audioFilePath;
 
     public Transcript Transcript { get; } = transcript;
+
+    /// <summary><c>false</c> se não foi possível gravar a legenda (ex.: pasta sem permissão de escrita).</summary>
+    public bool IsSaved { get; } = isSaved;
 }
 
 /// <summary>Geração de legenda com Whisper: opções, progresso e cancelamento.</summary>
@@ -43,6 +52,7 @@ public sealed partial class TranscriptionViewModel : ObservableObject
 {
     private readonly SubtitleGenerator _generator;
     private readonly ISubtitleStore _subtitleStore;
+    private readonly IModelStore _modelStore;
     private readonly IDialogService _dialogs;
     private readonly AppSettingsService _settings;
     private readonly ILogger<TranscriptionViewModel> _logger;
@@ -91,6 +101,7 @@ public sealed partial class TranscriptionViewModel : ObservableObject
     {
         _generator = generator;
         _subtitleStore = subtitleStore;
+        _modelStore = modelStore;
         _dialogs = dialogs;
         _settings = settings;
         _logger = logger;
@@ -150,9 +161,9 @@ public sealed partial class TranscriptionViewModel : ObservableObject
                 return;
             }
 
-            await _subtitleStore.SaveAsync(audioPath, transcript, cancellationToken);
+            var isSaved = await TrySaveAsync(audioPath, transcript, cancellationToken);
             StatusText = UiText.TranscriptionFinished(fileName, stopwatch.Elapsed, transcript.WordCount);
-            Completed?.Invoke(this, new TranscriptionCompletedEventArgs(audioPath, transcript));
+            Completed?.Invoke(this, new TranscriptionCompletedEventArgs(audioPath, transcript, isSaved));
         }
         catch (OperationCanceledException)
         {
@@ -170,6 +181,25 @@ public sealed partial class TranscriptionViewModel : ObservableObject
             Progress = 0;
             IsProgressIndeterminate = false;
             IsRunning = false;
+        }
+    }
+
+    /// <summary>
+    /// Grava a legenda gerada. Se não der (pasta somente leitura, disco cheio), avisa e retorna <c>false</c>:
+    /// o resultado continua aberto em vez de ser descartado depois de minutos de transcrição.
+    /// </summary>
+    private async Task<bool> TrySaveAsync(string audioPath, Transcript transcript, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _subtitleStore.SaveAsync(audioPath, transcript, cancellationToken);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogSaveFailed(_logger, ex, audioPath);
+            _dialogs.ShowError(UiText.ErrorTitle, UiText.GeneratedButNotSaved(UiText.ErrorReason(ex)));
+            return false;
         }
     }
 
@@ -196,12 +226,19 @@ public sealed partial class TranscriptionViewModel : ObservableObject
         StatusText = UiText.Progress(value);
     }
 
-    /// <summary>A mensagem da última geração não vale para outra faixa (a não ser que ainda esteja rodando).</summary>
+    /// <summary>
+    /// A mensagem da última geração não vale para outra faixa (a não ser que ainda esteja rodando). Aproveita
+    /// para atualizar o "baixado" dos modelos, caso algum arquivo tenha sido apagado por fora.
+    /// </summary>
     partial void OnTargetAudioFilePathChanged(string? value)
     {
         if (!IsRunning)
         {
             StatusText = null;
+            foreach (var option in Models)
+            {
+                option.IsDownloaded = _modelStore.IsDownloaded(option.Model);
+            }
         }
     }
 
@@ -216,4 +253,7 @@ public sealed partial class TranscriptionViewModel : ObservableObject
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Falha ao gerar legenda para {AudioFilePath}")]
     private static partial void LogFailed(ILogger logger, Exception exception, string audioFilePath);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Legenda gerada, mas não salva, para {AudioFilePath}")]
+    private static partial void LogSaveFailed(ILogger logger, Exception exception, string audioFilePath);
 }

@@ -67,6 +67,17 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public async Task Track_navigation_is_disabled_without_a_playlist()
+    {
+        _vm.NextTrackCommand.CanExecute(null).ShouldBeFalse();
+        _vm.PreviousTrackCommand.CanExecute(null).ShouldBeFalse();
+
+        await _vm.OpenPathsAsync([@"C:\aulas"]);
+
+        _vm.NextTrackCommand.CanExecute(null).ShouldBeTrue();
+    }
+
+    [Fact]
     public async Task Frame_tick_updates_karaoke_from_player_position()
     {
         await _vm.OpenPathsAsync([@"C:\aulas"]);
@@ -180,6 +191,36 @@ public sealed class MainViewModelTests
         _subtitles.Saved.ShouldContainKey(Aula2);
         _vm.Transcript.Segments.ShouldHaveSingleItem().Model.Text.ShouldBe("Nova legenda");
         _vm.Playlist.Items[1].HasSubtitle.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Generated_subtitle_that_cannot_be_saved_is_shown_as_unsaved()
+    {
+        await _vm.OpenPathsAsync([@"C:\aulas"]);
+        await _vm.NextTrackCommand.ExecuteAsync(null); // aula2, sem legenda
+        _subtitles.FailOnSave = true;
+        _transcriber.TranscribeAsync(default!, default!, TestContext.Current.CancellationToken).ReturnsForAnyArgs(Segments(
+            new RecognizedSegment(Ms(0), Ms(800), " Nova legenda", [])));
+
+        await _vm.Transcription.GenerateCommand.ExecuteAsync(null);
+
+        _vm.Transcript.Segments.ShouldHaveSingleItem().Model.Text.ShouldBe("Nova legenda");
+        _vm.Transcript.IsDirty.ShouldBeTrue();
+        _vm.Title.ShouldStartWith("•");
+    }
+
+    [Fact]
+    public async Task Folder_without_read_permission_shows_a_message_and_keeps_the_playlist()
+    {
+        await _vm.OpenPathsAsync([@"C:\aulas"]);
+        _dialogs.PickFolder(default).ReturnsForAnyArgs(@"C:\bloqueada");
+        _playlistSource.FromFolder(default!).ReturnsForAnyArgs(_ => throw new UnauthorizedAccessException(@"Access to the path 'C:\bloqueada' is denied."));
+
+        await _vm.OpenFolderCommand.ExecuteAsync(null);
+
+        _dialogs.Received(1).ShowError(Arg.Any<string>(), Arg.Is<string>(m => m.Contains(Resources.UiText.AccessDenied)));
+        _vm.Playlist.Items.Count.ShouldBe(2);
+        _player.CurrentFile.ShouldBe(Aula1);
     }
 
     [Fact]

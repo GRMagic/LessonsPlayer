@@ -213,6 +213,9 @@ public static partial class SubtitleTxtFormat
     [GeneratedRegex(@"^(?:(?<h>\d+):)?(?<m>\d{1,2}):(?<s>\d{1,2})(?:[.,](?<f>\d{1,3}))?$", RegexOptions.CultureInvariant)]
     private static partial Regex TimeRegex();
 
+    /// <summary>Duração estimada por palavra quando o trecho não informa um fim válido.</summary>
+    private static readonly TimeSpan EstimatedWordDuration = TimeSpan.FromMilliseconds(300);
+
     /// <summary>Segmento sendo montado durante a leitura.</summary>
     private sealed class PendingSegment(int lineNumber, TimeSpan start, TimeSpan end, string headerText)
     {
@@ -250,8 +253,9 @@ public static partial class SubtitleTxtFormat
             var segmentEnd = end;
             if (segmentEnd < start)
             {
+                // Sem o fim, estima a duração (senão todas as palavras ficariam com duração zero).
                 warnings.Add(new ParseWarning(lineNumber, ParseWarningKind.InvalidTimeRange));
-                segmentEnd = start;
+                segmentEnd = start + (EstimatedWordDuration * tokens.Length);
             }
 
             segments.Add(new Segment(TimeDistribution.Distribute(start, segmentEnd, tokens)));

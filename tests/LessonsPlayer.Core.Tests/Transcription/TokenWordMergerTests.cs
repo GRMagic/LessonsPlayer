@@ -58,6 +58,24 @@ public sealed class TokenWordMergerTests
         TokenWordMerger.ToSegment(segment).ShouldNotBeNull();
     }
 
+    /// <summary>
+    /// Visto no QA: "Today 1.920–1.920". O fim alinhado da primeira palavra caiu antes do início estimado, e a
+    /// seguinte começou no mesmo instante; sem duração, "Today" nunca era destacada no karaokê.
+    /// </summary>
+    [Fact]
+    public void Words_starting_together_get_a_minimum_duration()
+    {
+        var segment = SegmentOf(1920, 3000, " Today we",
+            Token(" Today", 1920, 1900),
+            Token(" we", 2400, 2700));
+
+        TokenWordMerger.ToSegment(segment)!.Words.Select(w => (w.Text, w.Start, w.End)).ShouldBe(
+        [
+            ("Today", Ms(1920), Ms(1980)),
+            ("we", Ms(1980), Ms(2700)),
+        ]);
+    }
+
     [Fact]
     public void Word_text_comes_from_segment_text_not_from_broken_token_text()
     {
@@ -116,8 +134,9 @@ public sealed class TokenWordMergerTests
 
         var words = TokenWordMerger.ToSegment(segment)!.Words;
 
-        words.Select(w => w.Start).ShouldBe([Ms(1000), Ms(1800), Ms(1800)]);
-        words.ShouldAllBe(w => w.End >= w.Start && w.End <= Ms(2000));
+        // "c" começaria junto com "b": ganha a duração mínima de 60 ms.
+        words.Select(w => w.Start).ShouldBe([Ms(1000), Ms(1800), Ms(1860)]);
+        words.ShouldAllBe(w => w.End > w.Start && w.End <= Ms(2000));
     }
 
     [Fact]

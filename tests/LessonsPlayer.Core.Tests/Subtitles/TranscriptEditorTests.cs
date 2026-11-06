@@ -5,6 +5,16 @@ namespace LessonsPlayer.Core.Tests.Subtitles;
 
 public sealed class TranscriptEditorTests
 {
+    [Fact]
+    public void Transcript_not_yet_saved_starts_dirty_until_marked_saved()
+    {
+        var editor = new TranscriptEditor(Sample(), isSaved: false);
+
+        editor.IsDirty.ShouldBeTrue();
+        editor.MarkSaved();
+        editor.IsDirty.ShouldBeFalse();
+    }
+
     private readonly TranscriptEditor _editor = new(Sample());
 
     private Transcript Current => _editor.Current;

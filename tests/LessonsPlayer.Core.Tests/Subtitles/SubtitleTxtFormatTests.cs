@@ -113,6 +113,17 @@ public sealed class SubtitleTxtFormatTests
     }
 
     [Fact]
+    public void Parse_inverted_header_without_words_estimates_the_duration()
+    {
+        const string content = "[00:00:12.000 --> 00:00:10.000] quatro palavras sem tempo\n";
+
+        var words = SubtitleTxtFormat.Parse(content).Transcript.Segments[0].Words;
+
+        words.ShouldAllBe(w => w.End > w.Start);
+        words[0].Start.ShouldBe(Ms(12000));
+    }
+
+    [Fact]
     public void Parse_gives_instant_words_the_time_until_the_next_word()
     {
         const string content = """

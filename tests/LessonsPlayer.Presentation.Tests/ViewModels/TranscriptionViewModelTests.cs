@@ -120,6 +120,23 @@ public sealed class TranscriptionViewModelTests
         _vm.StatusText.ShouldBe(Resources.UiText.NoSpeechFound("aula1.mp3"));
     }
 
+    /// <summary>Regressão do QA: numa pasta somente leitura, minutos de transcrição eram descartados.</summary>
+    [Fact]
+    public async Task Result_that_cannot_be_saved_is_kept_open_as_unsaved()
+    {
+        _subtitles.FailOnSave = true;
+        TranscriptionCompletedEventArgs? completed = null;
+        _vm.Completed += (_, e) => completed = e;
+        _transcriber.Release();
+
+        await _vm.GenerateCommand.ExecuteAsync(null);
+
+        completed.ShouldNotBeNull();
+        completed.IsSaved.ShouldBeFalse();
+        completed.Transcript.WordCount.ShouldBe(1);
+        _dialogs.Received(1).ShowError(Arg.Any<string>(), Arg.Is<string>(m => m.StartsWith("A legenda foi gerada", StringComparison.Ordinal)));
+    }
+
     [Fact]
     public void Language_is_locked_for_english_only_models()
     {

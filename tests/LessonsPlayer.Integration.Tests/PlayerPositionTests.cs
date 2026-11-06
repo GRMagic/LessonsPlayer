@@ -57,11 +57,14 @@ public sealed class PlayerPositionTests : IDisposable
         _player.Position.ShouldBe(TimeSpan.FromSeconds(2.5), Tolerance, "retomou do ponto do seek");
     }
 
-    [Fact]
-    public async Task Reaching_the_end_raises_completed_and_reports_duration()
+    /// <summary>Regressão do QA: no fim natural de um MP3 (mesmo longo) o player voltava a 0:00 e não avançava.</summary>
+    [Theory]
+    [InlineData(TestAudioFormat.Wav)]
+    [InlineData(TestAudioFormat.Mp3)]
+    public async Task Reaching_the_end_raises_completed_and_reports_duration(TestAudioFormat format)
     {
         var ct = TestContext.Current.CancellationToken;
-        OpenSampleOrSkip();
+        OpenSampleOrSkip(format);
         var completed = new TaskCompletionSource();
         _player.PlaybackCompleted += (_, _) => completed.TrySetResult();
 
@@ -128,12 +131,13 @@ public sealed class PlayerPositionTests : IDisposable
         _player.Position.ShouldBe(TimeSpan.FromSeconds(3.4), Tolerance);
     }
 
-    private void OpenSampleOrSkip()
+    private void OpenSampleOrSkip(TestAudioFormat format = TestAudioFormat.Wav)
     {
         var audio = SpeechAudio.TrySynthesize(
             "Este é um áudio de teste para medir a posição de reprodução do player com precisão.",
             "pt-BR",
-            Path.Combine(_workDirectory, "sample.wav"));
+            Path.Combine(_workDirectory, "sample"),
+            format);
         if (audio is null)
         {
             Assert.Skip("Nenhuma voz TTS pt-BR instalada.");

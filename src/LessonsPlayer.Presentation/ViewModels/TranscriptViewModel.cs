@@ -66,7 +66,10 @@ public sealed partial class TranscriptViewModel(
     public Transcript? Current => _editor?.Current;
 
     /// <summary>Mostra a legenda do áudio (ou nenhuma, se <paramref name="transcript"/> for <c>null</c>).</summary>
-    public void Load(string? audioFilePath, Transcript? transcript)
+    /// <param name="audioFilePath">Áudio atual, ou <c>null</c>.</param>
+    /// <param name="transcript">Legenda a mostrar, ou <c>null</c>.</param>
+    /// <param name="isSaved"><c>false</c> se a legenda ainda não está gravada (aparece com alterações pendentes).</param>
+    public void Load(string? audioFilePath, Transcript? transcript, bool isSaved = true)
     {
         if (_editor is not null)
         {
@@ -74,7 +77,7 @@ public sealed partial class TranscriptViewModel(
         }
 
         AudioFilePath = audioFilePath;
-        _editor = transcript is null ? null : new TranscriptEditor(transcript);
+        _editor = transcript is null ? null : new TranscriptEditor(transcript, isSaved);
         if (_editor is not null)
         {
             _editor.Changed += OnEditorChanged;
@@ -121,7 +124,7 @@ public sealed partial class TranscriptViewModel(
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             LogSaveFailed(logger, ex, AudioFilePath);
-            dialogs.ShowError(UiText.ErrorTitle, UiText.CannotSave(ex.Message));
+            dialogs.ShowError(UiText.ErrorTitle, UiText.CannotSave(UiText.ErrorReason(ex)));
             return false;
         }
     }

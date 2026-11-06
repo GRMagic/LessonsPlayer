@@ -68,12 +68,28 @@ public static class UiText
 
     public const string UnsupportedAudioFile = "O arquivo não é um áudio suportado ou está danificado.";
 
-    /// <summary>Motivo de uma falha para mostrar ao usuário (as mensagens do sistema vêm em inglês).</summary>
+    public const string AccessDenied = "O Windows não deu permissão para acessar este arquivo ou pasta.";
+    public const string PathNotFound = "O arquivo ou a pasta não existe mais.";
+    public const string FileInUse = "O arquivo está sendo usado por outro programa.";
+
+    private const int SharingViolation = unchecked((int)0x80070020);
+    private const int LockViolation = unchecked((int)0x80070021);
+
+    /// <summary>
+    /// Motivo de uma falha para mostrar ao usuário. As mensagens do sistema vêm em inglês e citam arquivos
+    /// internos (ex.: o <c>.tmp</c> da gravação), então os casos comuns têm texto próprio.
+    /// </summary>
     public static string ErrorReason(Exception exception) => exception switch
     {
         UnsupportedAudioFileException => UnsupportedAudioFile,
+        UnauthorizedAccessException or System.Security.SecurityException => AccessDenied,
+        FileNotFoundException or DirectoryNotFoundException => PathNotFound,
+        IOException { HResult: SharingViolation or LockViolation } => FileInUse,
         _ => exception.Message,
     };
+
+    public static string GeneratedButNotSaved(string reason) =>
+        $"A legenda foi gerada, mas não pôde ser salva ao lado do áudio.\n\n{reason}\n\nEla continua aberta, marcada como não salva (•).";
 
     public static string WindowTitle(string? fileName, bool isDirty) =>
         fileName is null ? AppName : $"{(isDirty ? "• " : string.Empty)}{fileName} — {AppName}";

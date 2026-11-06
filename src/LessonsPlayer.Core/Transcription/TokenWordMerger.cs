@@ -18,6 +18,9 @@ namespace LessonsPlayer.Core.Transcription;
 /// </summary>
 public static class TokenWordMerger
 {
+    /// <summary>Duração mínima de uma palavra (menor que o erro típico do alinhamento, ~40 ms de mediana × 1,5).</summary>
+    private static readonly TimeSpan MinimumWordDuration = TimeSpan.FromMilliseconds(60);
+
     /// <summary>
     /// Monta o trecho de palavras. Retorna <c>null</c> se não houver fala: texto vazio ou só marcações
     /// como <c>[BLANK_AUDIO]</c> (ver <see cref="NonSpeechText"/>).
@@ -51,19 +54,20 @@ public static class TokenWordMerger
             ends = new TimeSpan?[textWords.Length]; // sem correspondência confiável: termina onde a próxima começa
         }
 
-        // Garante ordem crescente dos inícios dentro do trecho.
-        var previousStart = segmentStart;
+        // Garante ordem crescente dos inícios dentro do trecho, com uma duração mínima por palavra: palavras
+        // que começam juntas (o DTW às vezes colapsa duas) ficariam com duração zero e nunca seriam destacadas.
         for (var i = 0; i < starts.Length; i++)
         {
-            starts[i] = Clamp(starts[i], previousStart, segmentEnd);
-            previousStart = starts[i];
+            var lower = i == 0 ? segmentStart : starts[i - 1] + MinimumWordDuration;
+            starts[i] = Clamp(starts[i], lower < segmentEnd ? lower : segmentEnd, segmentEnd);
         }
 
         var words = ImmutableArray.CreateBuilder<Word>(textWords.Length);
         for (var i = 0; i < textWords.Length; i++)
         {
+            // Sem fim alinhado, ou com fim que não passa do início, a palavra vai até a próxima.
             var limit = i + 1 < starts.Length ? starts[i + 1] : segmentEnd;
-            var end = Clamp(ends[i] ?? limit, starts[i], limit);
+            var end = ends[i] is { } aligned && aligned > starts[i] ? Clamp(aligned, starts[i], limit) : limit;
             words.Add(new Word(starts[i], end, textWords[i]));
         }
 

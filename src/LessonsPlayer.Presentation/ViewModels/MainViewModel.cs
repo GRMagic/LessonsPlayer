@@ -53,6 +53,14 @@ public sealed partial class MainViewModel : ObservableObject
         Transcript.Changed += (_, _) => UpdateTitle();
         Transcript.Saved += (_, subtitlePath) => StatusMessage = UiText.Saved(subtitlePath);
         Transcription.Completed += OnTranscriptionCompleted;
+        Playlist.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(PlaylistViewModel.IsEmpty))
+            {
+                NextTrackCommand.NotifyCanExecuteChanged();
+                PreviousTrackCommand.NotifyCanExecuteChanged();
+            }
+        };
     }
 
     public PlayerViewModel Player { get; }
@@ -73,7 +81,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
         else if (_settings.Current.LastFolder is { } folder && Directory.Exists(folder))
         {
-            Playlist.LoadFolder(folder);
+            TryLoadPlaylist(() => Playlist.LoadFolder(folder), folder, showError: false);
         }
     }
 
@@ -104,7 +112,11 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        Playlist.LoadPaths(paths);
+        if (!TryLoadPlaylist(() => Playlist.LoadPaths(paths), paths.First()))
+        {
+            return;
+        }
+
         if (paths.Count == 1 && Directory.Exists(paths.First()))
         {
             _settings.Update(s => s with { LastFolder = paths.First() });
@@ -122,9 +134,37 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        Playlist.LoadFolder(folder);
+        if (!TryLoadPlaylist(() => Playlist.LoadFolder(folder), folder))
+        {
+            return;
+        }
+
         _settings.Update(s => s with { LastFolder = folder });
         await PlayItemAsync(Playlist.Items.FirstOrDefault(), autoPlay: false, confirmLeave: false);
+    }
+
+    /// <summary>
+    /// Monta a playlist. Pasta sem permissão de leitura (ou que sumiu) vira uma mensagem; a playlist anterior
+    /// fica como estava, porque a lista nova só substitui a antiga depois de lida.
+    /// </summary>
+    private bool TryLoadPlaylist(Action load, string path, bool showError = true)
+    {
+        try
+        {
+            load();
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            LogOpenFailed(_logger, ex, path);
+            if (showError)
+            {
+                var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
+                _dialogs.ShowError(UiText.ErrorTitle, UiText.CannotOpen(name.Length > 0 ? name : path, UiText.ErrorReason(ex)));
+            }
+
+            return false;
+        }
     }
 
     [RelayCommand]
@@ -140,10 +180,12 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private Task PlayItem(PlaylistItemViewModel? item) => PlayItemAsync(item, autoPlay: true, confirmLeave: true);
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(HasPlaylist))]
     private Task NextTrack() => PlayNeighborAsync(Playlist.Next());
 
-    [RelayCommand]
+    private bool HasPlaylist => !Playlist.IsEmpty;
+
+    [RelayCommand(CanExecute = nameof(HasPlaylist))]
     private Task PreviousTrack() => PlayNeighborAsync(Playlist.Previous());
 
     private Task PlayNeighborAsync(PlaylistItemViewModel? item) =>
@@ -230,7 +272,7 @@ public sealed partial class MainViewModel : ObservableObject
         Playlist.RefreshSubtitleState(e.AudioFilePath);
         if (string.Equals(e.AudioFilePath, Transcript.AudioFilePath, StringComparison.OrdinalIgnoreCase))
         {
-            Transcript.Load(e.AudioFilePath, e.Transcript);
+            Transcript.Load(e.AudioFilePath, e.Transcript, e.IsSaved);
         }
 
         UpdateTitle();
