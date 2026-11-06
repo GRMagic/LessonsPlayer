@@ -1,4 +1,5 @@
 using System.Globalization;
+using LessonsPlayer.Core.Audio;
 using LessonsPlayer.Core.Subtitles;
 using LessonsPlayer.Core.Transcription;
 
@@ -21,6 +22,7 @@ public static class UiText
     public const string Language = "Idioma";
     public const string UseGpu = "Usar GPU";
     public const string UseGpuHint = "Usa a placa de vídeo quando disponível (Vulkan); sem ela, usa a CPU.";
+    public const string EnglishOnlyModelHint = "Os modelos .en transcrevem só inglês; o idioma não se aplica.";
 
     // --- Player ---
     public const string Play = "Tocar";
@@ -64,6 +66,31 @@ public static class UiText
 
     public const string LanguageAuto = "Detectar automaticamente";
 
+    public const string UnsupportedAudioFile = "O arquivo não é um áudio suportado ou está danificado.";
+
+    public const string AccessDenied = "O Windows não deu permissão para acessar este arquivo ou pasta.";
+    public const string PathNotFound = "O arquivo ou a pasta não existe mais.";
+    public const string FileInUse = "O arquivo está sendo usado por outro programa.";
+
+    private const int SharingViolation = unchecked((int)0x80070020);
+    private const int LockViolation = unchecked((int)0x80070021);
+
+    /// <summary>
+    /// Motivo de uma falha para mostrar ao usuário. As mensagens do sistema vêm em inglês e citam arquivos
+    /// internos (ex.: o <c>.tmp</c> da gravação), então os casos comuns têm texto próprio.
+    /// </summary>
+    public static string ErrorReason(Exception exception) => exception switch
+    {
+        UnsupportedAudioFileException => UnsupportedAudioFile,
+        UnauthorizedAccessException or System.Security.SecurityException => AccessDenied,
+        FileNotFoundException or DirectoryNotFoundException => PathNotFound,
+        IOException { HResult: SharingViolation or LockViolation } => FileInUse,
+        _ => exception.Message,
+    };
+
+    public static string GeneratedButNotSaved(string reason) =>
+        $"A legenda foi gerada, mas não pôde ser salva ao lado do áudio.\n\n{reason}\n\nEla continua aberta, marcada como não salva (•).";
+
     public static string WindowTitle(string? fileName, bool isDirty) =>
         fileName is null ? AppName : $"{(isDirty ? "• " : string.Empty)}{fileName} — {AppName}";
 
@@ -81,8 +108,26 @@ public static class UiText
 
     public static string PlaybackFailed(string reason) => $"A reprodução foi interrompida.\n\n{reason}";
 
-    public static string SubtitleWarnings(int count) =>
-        count == 1 ? "1 linha da legenda não foi reconhecida e foi ignorada." : $"{count} linhas da legenda não foram reconhecidas e foram ignoradas.";
+    /// <summary>Resumo dos problemas da legenda lida, ou <c>null</c> se não houver nenhum.</summary>
+    public static string? SubtitleWarnings(int ignoredLines, int correctedTimes)
+    {
+        var parts = new List<string>(2);
+        if (ignoredLines > 0)
+        {
+            parts.Add(ignoredLines == 1
+                ? "1 linha da legenda não foi reconhecida e foi ignorada"
+                : $"{ignoredLines} linhas da legenda não foram reconhecidas e foram ignoradas");
+        }
+
+        if (correctedTimes > 0)
+        {
+            parts.Add(correctedTimes == 1
+                ? "1 tempo com fim antes do início foi corrigido"
+                : $"{correctedTimes} tempos com fim antes do início foram corrigidos");
+        }
+
+        return parts.Count == 0 ? null : string.Join("; ", parts) + ".";
+    }
 
     public static string Saved(string path) => $"Legenda salva em {Path.GetFileName(path)}.";
 
@@ -95,8 +140,11 @@ public static class UiText
         _ => string.Create(CultureInfo.CurrentCulture, $"Transcrevendo… {progress.Fraction:P0}"),
     };
 
-    public static string TranscriptionFinished(TimeSpan elapsed, int words) =>
-        string.Create(CultureInfo.CurrentCulture, $"Legenda gerada em {elapsed:m\\:ss} ({words} palavras).");
+    public static string TranscriptionFinished(string fileName, TimeSpan elapsed, int words) =>
+        string.Create(CultureInfo.CurrentCulture, $"Legenda de \"{fileName}\" gerada em {elapsed:m\\:ss} ({words} palavras).");
+
+    public static string NoSpeechFound(string fileName) =>
+        $"Nenhuma fala reconhecida em \"{fileName}\"; a legenda não foi salva.";
 
     public const string TranscriptionCanceled = "Geração da legenda cancelada.";
 

@@ -10,7 +10,7 @@
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
         Title="{Binding Title}"
-        Width="1120" Height="720" MinWidth="760" MinHeight="420"
+        Width="1120" Height="720" MinWidth="920" MinHeight="420"
         WindowStartupLocation="CenterScreen"
         AllowDrop="True">
   <DockPanel Background="{StaticResource WindowBrush}">
@@ -20,13 +20,15 @@
             BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="8,6">
       <DockPanel LastChildFill="False">
         <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
-          <Button Style="{StaticResource FlatButton}" Command="{Binding OpenFolderCommand}">
+          <Button Style="{StaticResource FlatButton}" Command="{Binding OpenFolderCommand}"
+                  AutomationProperties.Name="{x:Static res:UiText.OpenFolder}">
             <StackPanel Orientation="Horizontal">
               <TextBlock Style="{StaticResource Icon}" Text="{StaticResource GlyphFolder}" />
               <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" Text="{x:Static res:UiText.OpenFolder}" />
             </StackPanel>
           </Button>
-          <Button Style="{StaticResource FlatButton}" Command="{Binding OpenFileCommand}">
+          <Button Style="{StaticResource FlatButton}" Command="{Binding OpenFileCommand}"
+                  AutomationProperties.Name="{x:Static res:UiText.OpenFile}">
             <StackPanel Orientation="Horizontal">
               <TextBlock Style="{StaticResource Icon}" Text="{StaticResource GlyphFile}" />
               <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" Text="{x:Static res:UiText.OpenFile}" />
@@ -36,8 +38,9 @@
 
         <!-- Geração de legenda -->
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" DataContext="{Binding Transcription}">
-          <TextBlock Style="{StaticResource Muted}" Margin="0,0,6,0" Text="{x:Static res:UiText.Model}" />
-          <ComboBox ItemsSource="{Binding Models}" SelectedItem="{Binding SelectedModel}" MinWidth="250"
+          <!-- Sem rótulos ao lado: a barra precisa caber na largura mínima da janela (nome e dica explicam). -->
+          <ComboBox ItemsSource="{Binding Models}" SelectedItem="{Binding SelectedModel}" Width="270"
+                    ToolTip="{x:Static res:UiText.Model}" AutomationProperties.Name="{x:Static res:UiText.Model}"
                     IsEnabled="{Binding IsIdle}">
             <ComboBox.ItemTemplate>
               <DataTemplate DataType="{x:Type vm:ModelOption}">
@@ -49,14 +52,27 @@
             </ComboBox.ItemTemplate>
           </ComboBox>
 
-          <TextBlock Style="{StaticResource Muted}" Margin="12,0,6,0" Text="{x:Static res:UiText.Language}" />
-          <ComboBox ItemsSource="{Binding Languages}" SelectedItem="{Binding SelectedLanguage}"
-                    DisplayMemberPath="Name" MinWidth="170" IsEnabled="{Binding IsIdle}" />
+          <ComboBox Margin="8,0,0,0" ItemsSource="{Binding Languages}" SelectedItem="{Binding SelectedLanguage}"
+                    DisplayMemberPath="Name" Width="170" IsEnabled="{Binding CanChooseLanguage}"
+                    AutomationProperties.Name="{x:Static res:UiText.Language}"
+                    ToolTipService.ShowOnDisabled="True">
+            <ComboBox.Style>
+              <Style TargetType="{x:Type ComboBox}" BasedOn="{StaticResource {x:Type ComboBox}}">
+                <Setter Property="ToolTip" Value="{x:Static res:UiText.Language}" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding SelectedModel.Model.EnglishOnly}" Value="True">
+                    <Setter Property="ToolTip" Value="{x:Static res:UiText.EnglishOnlyModelHint}" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </ComboBox.Style>
+          </ComboBox>
 
-          <CheckBox Margin="12,0" Content="{x:Static res:UiText.UseGpu}" IsChecked="{Binding UseGpu}"
+          <CheckBox Margin="10,0" Content="{x:Static res:UiText.UseGpu}" IsChecked="{Binding UseGpu}"
                     ToolTip="{x:Static res:UiText.UseGpuHint}" IsEnabled="{Binding IsIdle}" />
 
           <Button Style="{StaticResource AccentButton}" Command="{Binding GenerateCommand}"
+                  AutomationProperties.Name="{x:Static res:UiText.GenerateSubtitle}"
                   Visibility="{Binding IsIdle, Converter={StaticResource BoolToVisibility}}">
             <StackPanel Orientation="Horizontal">
               <TextBlock Style="{StaticResource Icon}" Foreground="White" Text="{StaticResource GlyphSubtitle}" />
@@ -64,6 +80,7 @@
             </StackPanel>
           </Button>
           <Button Style="{StaticResource FlatButton}" Command="{Binding GenerateCancelCommand}"
+                  AutomationProperties.Name="{x:Static res:UiText.Cancel}"
                   Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}}">
             <StackPanel Orientation="Horizontal">
               <TextBlock Style="{StaticResource Icon}" Text="{StaticResource GlyphCancel}" />
@@ -142,7 +159,9 @@
         <StackPanel Grid.Column="4" Orientation="Horizontal" ToolTip="{x:Static res:UiText.VolumeHint}">
           <TextBlock Style="{StaticResource Icon}" Foreground="{StaticResource MutedTextBrush}" Text="{StaticResource GlyphVolume}" />
           <Slider Width="100" Margin="8,0,0,0" VerticalAlignment="Center" Focusable="False"
-                  Minimum="0" Maximum="1" Value="{Binding Volume}" />
+                  AutomationProperties.Name="{x:Static res:UiText.VolumeHint}"
+                  Minimum="0" Maximum="1" SmallChange="0.05" LargeChange="0.1" IsMoveToPointEnabled="True"
+                  Value="{Binding Volume}" />
         </StackPanel>
       </Grid>
     </Border>
@@ -163,6 +182,12 @@
             <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}"
                      BorderThickness="0" Background="Transparent" Padding="4,0"
                      HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              <ListBox.ItemContainerStyle>
+                <!-- Sem isso, leitores de tela anunciam o nome da classe do ViewModel. -->
+                <Style TargetType="{x:Type ListBoxItem}">
+                  <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
+                </Style>
+              </ListBox.ItemContainerStyle>
               <ListBox.InputBindings>
                 <KeyBinding Key="Enter" CommandParameter="{Binding SelectedItem}"
                             Command="{Binding DataContext.PlayItemCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" />

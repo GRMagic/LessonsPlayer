@@ -36,6 +36,72 @@ public sealed class TokenWordMergerTests
     }
 
     [Fact]
+    public void Last_aligned_word_end_ignores_punctuation_and_timestamp_tokens()
+    {
+        // O trecho vai até 30 s, mas a última palavra termina em 5 s: o modelo pulou o resto da janela.
+        var segment = SegmentOf(1000, 30_000, " That's it.",
+            Token(" That", 1000, 1500),
+            Token("'s", 1500, 1800),
+            Token(" it", 1800, 5000),
+            Token(".", 5000, 5200),
+            new RecognizedToken("[_TT_1500]", Ms(30_000), Ms(30_000), Ms(30_000)));
+
+        TokenWordMerger.LastAlignedWordEnd(segment).ShouldBe(Ms(5000));
+        TokenWordMerger.LastAlignedWordEnd(SegmentOf(0, 1000, " Hi", new RecognizedToken(" Hi", Ms(0), Ms(500), null)))
+            .ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData(" [BLANK_AUDIO]")]
+    [InlineData(" [ Silence ]")]
+    [InlineData(" [Music]")]
+    [InlineData(" (risos)")]
+    [InlineData(" ♪ ♪")]
+    [InlineData(" ...")]
+    public void Segment_without_speech_is_dropped(string text)
+    {
+        // O Whisper escreve "[BLANK_AUDIO]" para silêncio; isso não é palavra dita.
+        var segment = SegmentOf(0, 15000, text, Token(text, 0, 15000));
+
+        TokenWordMerger.ToSegment(segment).ShouldBeNull();
+    }
+
+    /// <summary>Visto na entrevista da NASA (áudio real do YouTube): 22 marcadores "&gt;&gt;" viravam palavras.</summary>
+    [Fact]
+    public void Speaker_turn_markers_are_not_words()
+    {
+        var segment = SegmentOf(0, 1500, " >> Quite honestly", Token(" >>", 0, 200), Token(" Quite", 200, 700), Token(" honestly", 700, 1400));
+
+        TokenWordMerger.ToSegment(segment)!.Words.Select(w => (w.Text, w.Start)).ShouldBe([("Quite", Ms(200)), ("honestly", Ms(700))]);
+    }
+
+    [Fact]
+    public void Segment_with_speech_and_an_annotation_is_kept()
+    {
+        var segment = SegmentOf(0, 1000, " (risos) Bom dia", Token(" (risos)", 0, 300), Token(" Bom", 300, 600), Token(" dia", 600, 1000));
+
+        TokenWordMerger.ToSegment(segment).ShouldNotBeNull();
+    }
+
+    /// <summary>
+    /// Visto no QA: "Today 1.920–1.920". O fim alinhado da primeira palavra caiu antes do início estimado, e a
+    /// seguinte começou no mesmo instante; sem duração, "Today" nunca era destacada no karaokê.
+    /// </summary>
+    [Fact]
+    public void Words_starting_together_get_a_minimum_duration()
+    {
+        var segment = SegmentOf(1920, 3000, " Today we",
+            Token(" Today", 1920, 1900),
+            Token(" we", 2400, 2700));
+
+        TokenWordMerger.ToSegment(segment)!.Words.Select(w => (w.Text, w.Start, w.End)).ShouldBe(
+        [
+            ("Today", Ms(1920), Ms(1980)),
+            ("we", Ms(1980), Ms(2700)),
+        ]);
+    }
+
+    [Fact]
     public void Word_text_comes_from_segment_text_not_from_broken_token_text()
     {
         // "ação" com o "ç" dividido em dois tokens que, isolados, não decodificam.
@@ -93,8 +159,9 @@ public sealed class TokenWordMergerTests
 
         var words = TokenWordMerger.ToSegment(segment)!.Words;
 
-        words.Select(w => w.Start).ShouldBe([Ms(1000), Ms(1800), Ms(1800)]);
-        words.ShouldAllBe(w => w.End >= w.Start && w.End <= Ms(2000));
+        // "c" começaria junto com "b": ganha a duração mínima de 60 ms.
+        words.Select(w => w.Start).ShouldBe([Ms(1000), Ms(1800), Ms(1860)]);
+        words.ShouldAllBe(w => w.End > w.Start && w.End <= Ms(2000));
     }
 
     [Fact]

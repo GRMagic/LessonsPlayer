@@ -1,4 +1,5 @@
 using LessonsPlayer.Core.Abstractions;
+using LessonsPlayer.Core.Audio;
 
 namespace LessonsPlayer.Presentation.Tests.Fakes;
 
@@ -29,7 +30,7 @@ internal sealed class FakeAudioPlayer : IAudioPlayer
     {
         if (UnsupportedFiles.Contains(filePath))
         {
-            throw new InvalidDataException("Formato não suportado");
+            throw new UnsupportedAudioFileException("The byte stream type is not supported.");
         }
 
         CurrentFile = filePath;

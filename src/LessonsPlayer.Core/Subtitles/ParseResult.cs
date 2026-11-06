@@ -25,4 +25,13 @@ public readonly record struct ParseWarning(int LineNumber, ParseWarningKind Kind
 public sealed record ParseResult(Transcript Transcript, ImmutableArray<ParseWarning> Warnings)
 {
     public bool HasWarnings => !Warnings.IsDefaultOrEmpty;
+
+    /// <summary>Linhas descartadas: não reconhecidas, palavra fora de trecho ou trecho vazio.</summary>
+    public int IgnoredLineCount => Count(kind => kind != ParseWarningKind.InvalidTimeRange);
+
+    /// <summary>Intervalos com fim antes do início, que foram corrigidos (a linha foi aproveitada).</summary>
+    public int CorrectedTimeCount => Count(kind => kind == ParseWarningKind.InvalidTimeRange);
+
+    private int Count(Func<ParseWarningKind, bool> predicate) =>
+        Warnings.IsDefaultOrEmpty ? 0 : Warnings.Count(w => predicate(w.Kind));
 }

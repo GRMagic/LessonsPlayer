@@ -106,8 +106,53 @@ public sealed class SubtitleTxtFormatTests
         var result = SubtitleTxtFormat.Parse(content);
 
         result.Transcript.Segments.Select(s => s.Text).ShouldBe(["antes", "depois"]);
-        result.Transcript.Segments[0].Words[0].End.ShouldBe(Ms(1500));
+        result.Transcript.Segments[0].Words[0].End.ShouldBe(Ms(2000), "sem duração não apareceria no karaokê: vai até o fim do cabeçalho");
         result.Warnings.ShouldContain(new ParseWarning(3, ParseWarningKind.InvalidTimeRange));
+        result.CorrectedTimeCount.ShouldBe(1);
+        result.IgnoredLineCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public void Parse_inverted_header_without_words_estimates_the_duration()
+    {
+        const string content = "[00:00:12.000 --> 00:00:10.000] quatro palavras sem tempo\n";
+
+        var words = SubtitleTxtFormat.Parse(content).Transcript.Segments[0].Words;
+
+        words.ShouldAllBe(w => w.End > w.Start);
+        words[0].Start.ShouldBe(Ms(12000));
+    }
+
+    [Fact]
+    public void Parse_gives_instant_words_the_time_until_the_next_word()
+    {
+        const string content = """
+            [00:00:01.000 --> 00:00:03.000] um dois três
+            00:00:01.000 00:00:01.400 um
+            00:00:01.800 00:00:01.800 dois
+            00:00:02.500 00:00:02.900 três
+            """;
+
+        var words = SubtitleTxtFormat.Parse(content).Transcript.Segments[0].Words;
+
+        words.Select(w => (w.Start, w.End)).ShouldBe([(Ms(1000), Ms(1400)), (Ms(1800), Ms(2500)), (Ms(2500), Ms(2900))]);
+    }
+
+    [Fact]
+    public void Parse_counts_ignored_lines_apart_from_corrected_times()
+    {
+        const string content = """
+            linha solta
+            [00:00:01.000 --> 00:00:02.000] oi
+            00:00:01.500 00:00:01.000 oi
+            texto qualquer
+            [xx --> yy] quebrado
+            """;
+
+        var result = SubtitleTxtFormat.Parse(content);
+
+        result.IgnoredLineCount.ShouldBe(3);
+        result.CorrectedTimeCount.ShouldBe(1);
     }
 
     [Fact]

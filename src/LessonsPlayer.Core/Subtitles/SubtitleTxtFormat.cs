@@ -213,6 +213,9 @@ public static partial class SubtitleTxtFormat
     [GeneratedRegex(@"^(?:(?<h>\d+):)?(?<m>\d{1,2}):(?<s>\d{1,2})(?:[.,](?<f>\d{1,3}))?$", RegexOptions.CultureInvariant)]
     private static partial Regex TimeRegex();
 
+    /// <summary>Duração estimada por palavra quando o trecho não informa um fim válido.</summary>
+    private static readonly TimeSpan EstimatedWordDuration = TimeSpan.FromMilliseconds(300);
+
     /// <summary>Segmento sendo montado durante a leitura.</summary>
     private sealed class PendingSegment(int lineNumber, TimeSpan start, TimeSpan end, string headerText)
     {
@@ -236,7 +239,7 @@ public static partial class SubtitleTxtFormat
         {
             if (_words.Count > 0)
             {
-                segments.Add(new Segment(_words.OrderBy(w => w.Start)));
+                segments.Add(new Segment(GiveDurationToInstantWords([.. _words.OrderBy(w => w.Start)], end)));
                 return;
             }
 
@@ -250,11 +253,31 @@ public static partial class SubtitleTxtFormat
             var segmentEnd = end;
             if (segmentEnd < start)
             {
+                // Sem o fim, estima a duração (senão todas as palavras ficariam com duração zero).
                 warnings.Add(new ParseWarning(lineNumber, ParseWarningKind.InvalidTimeRange));
-                segmentEnd = start;
+                segmentEnd = start + (EstimatedWordDuration * tokens.Length);
             }
 
             segments.Add(new Segment(TimeDistribution.Distribute(start, segmentEnd, tokens)));
+        }
+
+        /// <summary>
+        /// Uma palavra sem duração (fim igual ao início, ou invertido e corrigido) nunca ficaria destacada no
+        /// karaokê. Ela passa a ir até o início da palavra seguinte, ou até o fim do cabeçalho se for a última.
+        /// </summary>
+        private static List<Word> GiveDurationToInstantWords(List<Word> words, TimeSpan headerEnd)
+        {
+            for (var i = 0; i < words.Count; i++)
+            {
+                var word = words[i];
+                var limit = i + 1 < words.Count ? words[i + 1].Start : headerEnd;
+                if (word.End <= word.Start && limit > word.Start)
+                {
+                    words[i] = word.WithTiming(word.Start, limit);
+                }
+            }
+
+            return words;
         }
     }
 }

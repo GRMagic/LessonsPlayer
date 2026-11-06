@@ -48,10 +48,19 @@ public sealed partial class MainViewModel : ObservableObject
 
         _frameTimer.Tick += (_, _) => OnFrame();
         Player.PlaybackCompleted += async (_, _) => await PlayNeighborAsync(Playlist.Next());
-        Player.PlaybackFailed += (_, e) => _dialogs.ShowError(UiText.ErrorTitle, UiText.PlaybackFailed(e.Exception.Message));
+        Player.PlaybackFailed += (_, e) => _dialogs.ShowError(UiText.ErrorTitle, UiText.PlaybackFailed(UiText.ErrorReason(e.Exception)));
         Transcript.SeekRequested += (_, position) => Player.Seek(position);
         Transcript.Changed += (_, _) => UpdateTitle();
+        Transcript.Saved += (_, subtitlePath) => StatusMessage = UiText.Saved(subtitlePath);
         Transcription.Completed += OnTranscriptionCompleted;
+        Playlist.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(PlaylistViewModel.IsEmpty))
+            {
+                NextTrackCommand.NotifyCanExecuteChanged();
+                PreviousTrackCommand.NotifyCanExecuteChanged();
+            }
+        };
     }
 
     public PlayerViewModel Player { get; }
@@ -72,27 +81,27 @@ public sealed partial class MainViewModel : ObservableObject
         }
         else if (_settings.Current.LastFolder is { } folder && Directory.Exists(folder))
         {
-            Playlist.LoadFolder(folder);
+            TryLoadPlaylist(() => Playlist.LoadFolder(folder), folder, showError: false);
         }
     }
 
-    /// <summary>Chamado ao fechar a janela. Retorna <c>false</c> se o usuário desistir de fechar.</summary>
-    public async Task<bool> PrepareToCloseAsync()
+    /// <summary>
+    /// Primeira etapa ao fechar a janela: pergunta sobre alterações não salvas.
+    /// Retorna <c>false</c> se o usuário desistir de fechar.
+    /// </summary>
+    public Task<bool> ConfirmCloseAsync() => ConfirmLeaveTranscriptAsync();
+
+    /// <summary>
+    /// Segunda etapa ao fechar: para a geração e espera ela terminar, porque o modelo nativo não pode ser
+    /// liberado enquanto calcula. Na CPU, com modelos grandes, isso pode levar alguns segundos (o Whisper só
+    /// para entre etapas). Depois para o áudio e grava as preferências.
+    /// </summary>
+    public async Task ShutdownAsync()
     {
-        if (!await ConfirmLeaveTranscriptAsync())
-        {
-            return false;
-        }
-
-        if (Transcription.IsRunning)
-        {
-            Transcription.GenerateCancelCommand.Execute(null);
-        }
-
+        await Transcription.CancelAndWaitAsync();
         _frameTimer.IsEnabled = false;
         Player.Unload();
         _settings.Flush();
-        return true;
     }
 
     /// <summary>Abre arquivos e/ou pastas (ex.: arrastar e soltar) e toca o primeiro áudio.</summary>
@@ -103,7 +112,11 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        Playlist.LoadPaths(paths);
+        if (!TryLoadPlaylist(() => Playlist.LoadPaths(paths), paths.First()))
+        {
+            return;
+        }
+
         if (paths.Count == 1 && Directory.Exists(paths.First()))
         {
             _settings.Update(s => s with { LastFolder = paths.First() });
@@ -121,9 +134,37 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        Playlist.LoadFolder(folder);
+        if (!TryLoadPlaylist(() => Playlist.LoadFolder(folder), folder))
+        {
+            return;
+        }
+
         _settings.Update(s => s with { LastFolder = folder });
         await PlayItemAsync(Playlist.Items.FirstOrDefault(), autoPlay: false, confirmLeave: false);
+    }
+
+    /// <summary>
+    /// Monta a playlist. Pasta sem permissão de leitura (ou que sumiu) vira uma mensagem; a playlist anterior
+    /// fica como estava, porque a lista nova só substitui a antiga depois de lida.
+    /// </summary>
+    private bool TryLoadPlaylist(Action load, string path, bool showError = true)
+    {
+        try
+        {
+            load();
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            LogOpenFailed(_logger, ex, path);
+            if (showError)
+            {
+                var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
+                _dialogs.ShowError(UiText.ErrorTitle, UiText.CannotOpen(name.Length > 0 ? name : path, UiText.ErrorReason(ex)));
+            }
+
+            return false;
+        }
     }
 
     [RelayCommand]
@@ -139,10 +180,12 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private Task PlayItem(PlaylistItemViewModel? item) => PlayItemAsync(item, autoPlay: true, confirmLeave: true);
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(HasPlaylist))]
     private Task NextTrack() => PlayNeighborAsync(Playlist.Next());
 
-    [RelayCommand]
+    private bool HasPlaylist => !Playlist.IsEmpty;
+
+    [RelayCommand(CanExecute = nameof(HasPlaylist))]
     private Task PreviousTrack() => PlayNeighborAsync(Playlist.Previous());
 
     private Task PlayNeighborAsync(PlaylistItemViewModel? item) =>
@@ -150,8 +193,14 @@ public sealed partial class MainViewModel : ObservableObject
 
     private async Task PlayItemAsync(PlaylistItemViewModel? item, bool autoPlay, bool confirmLeave)
     {
-        if (item is null || (confirmLeave && !await ConfirmLeaveTranscriptAsync()))
+        if (item is null)
         {
+            return;
+        }
+
+        if (confirmLeave && !await ConfirmLeaveTranscriptAsync())
+        {
+            Playlist.SelectedItem = Playlist.CurrentItem; // desistiu de trocar: a seleção volta para a faixa atual
             return;
         }
 
@@ -164,7 +213,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             // Formato não suportado, arquivo corrompido ou sem dispositivo de áudio.
             LogOpenFailed(_logger, ex, item.FilePath);
-            _dialogs.ShowError(UiText.ErrorTitle, UiText.CannotOpen(item.FileName, ex.Message));
+            _dialogs.ShowError(UiText.ErrorTitle, UiText.CannotOpen(item.FileName, UiText.ErrorReason(ex)));
             Playlist.SetCurrent(null);
             Transcript.Load(null, null);
             Transcription.TargetAudioFilePath = null;
@@ -191,7 +240,7 @@ public sealed partial class MainViewModel : ObservableObject
             Transcript.Load(audioFilePath, result?.Transcript);
             if (result is { HasWarnings: true })
             {
-                StatusMessage = UiText.SubtitleWarnings(result.Warnings.Length);
+                StatusMessage = UiText.SubtitleWarnings(result.IgnoredLineCount, result.CorrectedTimeCount);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -223,7 +272,7 @@ public sealed partial class MainViewModel : ObservableObject
         Playlist.RefreshSubtitleState(e.AudioFilePath);
         if (string.Equals(e.AudioFilePath, Transcript.AudioFilePath, StringComparison.OrdinalIgnoreCase))
         {
-            Transcript.Load(e.AudioFilePath, e.Transcript);
+            Transcript.Load(e.AudioFilePath, e.Transcript, e.IsSaved);
         }
 
         UpdateTitle();

@@ -168,7 +168,7 @@ public sealed class TimestampPrecisionTests : IDisposable
         var models = new HuggingFaceModelStore(
             http, InfrastructureOptions.CreateDefault(), NullLogger<HuggingFaceModelStore>.Instance);
         using var transcriber = new WhisperNetTranscriber(NullLogger<WhisperNetTranscriber>.Instance);
-        var generator = new SubtitleGenerator(models, new AudioFileDecoder(), transcriber, TimeProvider.System);
+        var generator = new SubtitleGenerator(models, new AudioFileDecoder(), TestSpeechDetector.Create(), transcriber, TimeProvider.System);
 
         return await generator.GenerateAsync(
             audioPath, new TranscriptionOptions(model, language, UseGpu: true), progress: null, ct);

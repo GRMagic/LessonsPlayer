@@ -57,11 +57,14 @@ public sealed class PlayerPositionTests : IDisposable
         _player.Position.ShouldBe(TimeSpan.FromSeconds(2.5), Tolerance, "retomou do ponto do seek");
     }
 
-    [Fact]
-    public async Task Reaching_the_end_raises_completed_and_reports_duration()
+    /// <summary>Regressão do QA: no fim natural de um MP3 (mesmo longo) o player voltava a 0:00 e não avançava.</summary>
+    [Theory]
+    [InlineData(TestAudioFormat.Wav)]
+    [InlineData(TestAudioFormat.Mp3)]
+    public async Task Reaching_the_end_raises_completed_and_reports_duration(TestAudioFormat format)
     {
         var ct = TestContext.Current.CancellationToken;
-        OpenSampleOrSkip();
+        OpenSampleOrSkip(format);
         var completed = new TaskCompletionSource();
         _player.PlaybackCompleted += (_, _) => completed.TrySetResult();
 
@@ -73,27 +76,87 @@ public sealed class PlayerPositionTests : IDisposable
         _player.Position.ShouldBe(_player.Duration);
     }
 
-    private void OpenSampleOrSkip()
+    /// <summary>
+    /// Regressão: em MP3 a duração é estimada e pode passar do que é decodificado. O fim era detectado
+    /// comparando posição e tamanho, e um MP3 curto ficava "tocando" para sempre, com a posição em 0:00.
+    /// </summary>
+    [Theory]
+    [InlineData(0.6, TestAudioFormat.Mp3)]
+    [InlineData(2.5, TestAudioFormat.Mp3)]
+    [InlineData(0.6, TestAudioFormat.Wav)]
+    public async Task Short_file_played_from_the_start_completes(double seconds, TestAudioFormat format)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var path = ToneAudio.Create(Path.Combine(_workDirectory, "tone"), TimeSpan.FromSeconds(seconds), format);
+        OpenOrSkip(path);
+        var completed = new TaskCompletionSource();
+        _player.PlaybackCompleted += (_, _) => completed.TrySetResult();
+
+        _player.Play();
+        await completed.Task.WaitAsync(TimeSpan.FromSeconds(seconds + 3), ct);
+
+        _player.State.ShouldBe(PlaybackState.Stopped);
+        _player.Position.ShouldBe(_player.Duration);
+    }
+
+    /// <summary>
+    /// No app o <c>PlaybackStopped</c> é postado na UI e chega depois que o seek terminou. O <c>Stop()</c>
+    /// do seek não pode ser confundido com fim de faixa.
+    /// </summary>
+    [Fact]
+    public async Task Seek_is_not_taken_as_the_end_when_the_stop_event_is_posted()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new SynchronizationContext()); // Post = fila do ThreadPool
+        try
+        {
+            OpenSampleOrSkip();
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+
+        var completions = 0;
+        _player.PlaybackCompleted += (_, _) => Interlocked.Increment(ref completions);
+
+        _player.Play();
+        await Task.Delay(300, ct);
+        _player.Seek(TimeSpan.FromSeconds(3));
+        await Task.Delay(400, ct);
+
+        completions.ShouldBe(0);
+        _player.State.ShouldBe(PlaybackState.Playing);
+        _player.Position.ShouldBe(TimeSpan.FromSeconds(3.4), Tolerance);
+    }
+
+    private void OpenSampleOrSkip(TestAudioFormat format = TestAudioFormat.Wav)
     {
         var audio = SpeechAudio.TrySynthesize(
             "Este é um áudio de teste para medir a posição de reprodução do player com precisão.",
             "pt-BR",
-            Path.Combine(_workDirectory, "sample.wav"));
+            Path.Combine(_workDirectory, "sample"),
+            format);
         if (audio is null)
         {
             Assert.Skip("Nenhuma voz TTS pt-BR instalada.");
         }
 
+        OpenOrSkip(audio.FilePath);
+        _player.Duration.ShouldBeGreaterThan(TimeSpan.FromSeconds(5.5), "o áudio de teste precisa ter mais de 5,5 s");
+    }
+
+    private void OpenOrSkip(string path)
+    {
         try
         {
-            _player.Open(audio.FilePath);
+            _player.Open(path);
         }
         catch (System.Runtime.InteropServices.COMException ex)
         {
             // Só a ausência de dispositivo (erro COM do WASAPI) vira "skip"; qualquer outra falha é bug.
             Assert.Skip($"Sem dispositivo de áudio: {ex.Message}");
         }
-
-        _player.Duration.ShouldBeGreaterThan(TimeSpan.FromSeconds(5.5), "o áudio de teste precisa ter mais de 5,5 s");
     }
 }

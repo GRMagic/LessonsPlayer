@@ -14,13 +14,17 @@ public sealed class TranscriptEditor
 
     private readonly List<Transcript> _undo = [];
     private readonly List<Transcript> _redo = [];
-    private Transcript _saved;
+    private Transcript? _saved;
 
-    public TranscriptEditor(Transcript transcript)
+    /// <param name="transcript">Legenda inicial.</param>
+    /// <param name="isSaved">
+    /// <c>false</c> quando a legenda inicial ainda não está gravada (ex.: gerada numa pasta sem permissão de escrita).
+    /// </param>
+    public TranscriptEditor(Transcript transcript, bool isSaved = true)
     {
         ArgumentNullException.ThrowIfNull(transcript);
         Current = transcript;
-        _saved = transcript;
+        _saved = isSaved ? transcript : null;
     }
 
     /// <summary>Disparado depois de qualquer alteração em <see cref="Current"/> ou no estado de salvo.</summary>
@@ -92,6 +96,7 @@ public sealed class TranscriptEditor
     /// <summary>
     /// Define o início da palavra. O valor é limitado entre o início da palavra anterior e o da próxima,
     /// para manter a ordem. Se a anterior terminasse depois do novo início, o fim dela é recuado.
+    /// Um início depois do fim desloca a palavra inteira, mantendo a duração (até o início da próxima).
     /// </summary>
     public bool SetWordStart(WordLocation location, TimeSpan start)
     {
@@ -107,7 +112,8 @@ public sealed class TranscriptEditor
         var upper = next is { } n ? Current.FindWord(n)!.Start : TimeSpan.MaxValue;
         start = Clamp(start, lower, upper);
 
-        var transcript = ReplaceWord(Current, location, word.WithTiming(start, Max(word.End, start)));
+        var end = word.End > start ? word.End : Min(start + word.Duration, Max(upper, start));
+        var transcript = ReplaceWord(Current, location, word.WithTiming(start, end));
         if (previous is { } prevLocation && transcript.FindWord(prevLocation) is { } prevWord && prevWord.End > start)
         {
             transcript = ReplaceWord(transcript, prevLocation, prevWord.WithTiming(prevWord.Start, start));
@@ -243,4 +249,6 @@ public sealed class TranscriptEditor
         value < min ? min : value > max ? max : value;
 
     private static TimeSpan Max(TimeSpan a, TimeSpan b) => a > b ? a : b;
+
+    private static TimeSpan Min(TimeSpan a, TimeSpan b) => a < b ? a : b;
 }

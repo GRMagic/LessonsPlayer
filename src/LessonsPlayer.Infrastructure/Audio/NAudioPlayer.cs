@@ -14,9 +14,14 @@ namespace LessonsPlayer.Infrastructure.Audio;
 /// </para>
 /// <para>
 /// Threads: os métodos públicos devem ser chamados de uma única thread (a da UI). O evento
-/// <c>PlaybackStopped</c> do NAudio chega pela thread de reprodução, às vezes de forma síncrona dentro
-/// de <c>Stop()</c>. Por isso o handler não usa locks (um lock causaria deadlock com o <c>Stop()</c>
-/// do seek) e só lê estado que é seguro observar de outra thread.
+/// <c>PlaybackStopped</c> do NAudio é postado no <see cref="SynchronizationContext"/> capturado na criação
+/// (no app, a UI, depois que o <c>Stop()</c> do seek já retornou). Sem contexto, ele chega pela thread de
+/// reprodução, de forma síncrona dentro de <c>Stop()</c>. Por isso o handler não usa locks (um lock causaria
+/// deadlock com o <c>Stop()</c> do seek) e só lê estado que é seguro observar de outra thread.
+/// </para>
+/// <para>
+/// Fim de faixa: só quando a fonte se esgotou (<see cref="EndTrackingWaveProvider"/>). Um
+/// <c>PlaybackStopped</c> sem isso veio do <c>Stop()</c> de um seek.
 /// </para>
 /// </summary>
 public sealed partial class NAudioPlayer(ILogger<NAudioPlayer> logger) : IAudioPlayer
@@ -24,6 +29,7 @@ public sealed partial class NAudioPlayer(ILogger<NAudioPlayer> logger) : IAudioP
     private const int LatencyMilliseconds = 80;
 
     private AudioFileReader? _reader;
+    private EndTrackingWaveProvider? _source;
     private WasapiPlayer? _output;
     private TimeSpan _origin;            // posição do arquivo onde o relógio do dispositivo começou a contar
     private volatile bool _reachedEnd;
@@ -52,7 +58,8 @@ public sealed partial class NAudioPlayer(ILogger<NAudioPlayer> logger) : IAudioP
                 return TimeSpan.Zero;
             }
 
-            if (_reachedEnd)
+            // Depois que o dispositivo para sozinho o relógio volta a zero, antes de o evento de fim chegar.
+            if (_reachedEnd || (_source is { IsExhausted: true } && output.PlaybackState == NAudio.Wave.PlaybackState.Stopped))
             {
                 return reader.TotalTime;
             }
@@ -81,16 +88,19 @@ public sealed partial class NAudioPlayer(ILogger<NAudioPlayer> logger) : IAudioP
         Close();
 
         AudioFileReader? reader = null;
+        EndTrackingWaveProvider? source = null;
         WasapiPlayer? output = null;
         try
         {
-            reader = new AudioFileReader(filePath) { Volume = _volume };
+            reader = AudioFiles.OpenReader(filePath);
+            reader.Volume = _volume;
             output = new WasapiPlayerBuilder()
                 .WithSharedMode()
                 .WithEventSync()
                 .WithLatency(LatencyMilliseconds)
                 .Build();
-            output.Init(reader);
+            source = new EndTrackingWaveProvider(reader);
+            output.Init(source);
         }
         catch
         {
@@ -102,6 +112,7 @@ public sealed partial class NAudioPlayer(ILogger<NAudioPlayer> logger) : IAudioP
 
         output.PlaybackStopped += OnPlaybackStopped;
         _reader = reader;
+        _source = source;
         _output = output;
         _origin = TimeSpan.Zero;
         _reachedEnd = false;
@@ -114,7 +125,7 @@ public sealed partial class NAudioPlayer(ILogger<NAudioPlayer> logger) : IAudioP
     public void Close()
     {
         var (output, reader) = (_output, _reader);
-        (_output, _reader) = (null, null);
+        (_output, _reader, _source) = (null, null, null);
         CurrentFile = null;
         _reachedEnd = false;
 
@@ -135,12 +146,13 @@ public sealed partial class NAudioPlayer(ILogger<NAudioPlayer> logger) : IAudioP
             return;
         }
 
-        if (_reachedEnd)
+        if (_reachedEnd || _source is { IsExhausted: true })
         {
             // Tocar de novo depois do fim recomeça do início.
             reader.Position = 0;
             _origin = TimeSpan.Zero;
             _reachedEnd = false;
+            _source?.Reset();
         }
 
         output.Play();
@@ -179,6 +191,7 @@ public sealed partial class NAudioPlayer(ILogger<NAudioPlayer> logger) : IAudioP
             reader.CurrentTime = Clamp(position, TimeSpan.Zero, reader.TotalTime);
             _origin = reader.CurrentTime;
             _reachedEnd = false;
+            _source?.Reset();
         }
         finally
         {
@@ -208,8 +221,8 @@ public sealed partial class NAudioPlayer(ILogger<NAudioPlayer> logger) : IAudioP
             return;
         }
 
-        // Também chega aqui depois do Stop() de um seek; só é "fim" se o arquivo foi lido até o final.
-        if (_isRepositioning || _reader is not { } reader || reader.Position < reader.Length)
+        // Também chega aqui depois do Stop() de um seek (o seek zera IsExhausted); só é "fim" se a fonte se esgotou.
+        if (_isRepositioning || _reachedEnd || _source is not { IsExhausted: true })
         {
             return;
         }
