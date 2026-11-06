@@ -173,6 +173,21 @@ public sealed partial class TranscriptionViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Cancela a geração em andamento e espera ela terminar de fato (ao fechar o app, o modelo nativo só pode
+    /// ser liberado depois disso).
+    /// </summary>
+    public async Task CancelAndWaitAsync()
+    {
+        if (GenerateCommand.ExecutionTask is not { IsCompleted: false } running)
+        {
+            return;
+        }
+
+        GenerateCancelCommand.Execute(null);
+        await running; // GenerateAsync trata o cancelamento e as falhas; não lança
+    }
+
     private void OnProgress(TranscriptionProgress value)
     {
         IsProgressIndeterminate = value.Stage == TranscriptionStage.DecodingAudio

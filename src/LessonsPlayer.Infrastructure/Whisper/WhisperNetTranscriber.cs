@@ -25,6 +25,11 @@ namespace LessonsPlayer.Infrastructure.Whisper;
 /// Esse é o mesmo avanço (seek) que o Whisper faz internamente. O idioma detectado na primeira fatia vale para
 /// as seguintes, e o texto anterior vai como prompt, para manter o contexto.
 /// </para>
+/// <para>
+/// <b>Descarte:</b> liberar o modelo enquanto o whisper.cpp ainda calcula derruba o processo (0xC0000005 em
+/// ggml-cpu-whisper.dll; acontecia ao fechar o app durante uma geração na CPU). Por isso <see cref="Dispose"/>
+/// cancela o trabalho em andamento e espera ele terminar antes de liberar o modelo.
+/// </para>
 /// </summary>
 public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
 {
@@ -40,12 +45,17 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
     /// <summary>Restos menores que isso no fim do áudio são ignorados (o whisper.cpp faz o mesmo).</summary>
     private static readonly TimeSpan MinimumRemainder = TimeSpan.FromSeconds(1);
 
+    /// <summary>Espera máxima, no descarte, para a transcrição em andamento parar.</summary>
+    private static readonly TimeSpan DisposeTimeout = TimeSpan.FromSeconds(30);
+
     private static readonly Lock RuntimeConfigurationLock = new();
     private static bool _runtimeConfigured;
 
     private readonly ILogger<WhisperNetTranscriber> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly CancellationTokenSource _disposing = new();
     private (string ModelPath, bool UseGpu, WhisperFactory Factory)? _cached;
+    private int _disposed;
 
     public WhisperNetTranscriber(ILogger<WhisperNetTranscriber> logger)
     {
@@ -60,6 +70,11 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
     {
         ArgumentNullException.ThrowIfNull(audio);
         ArgumentNullException.ThrowIfNull(settings);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+
+        // O descarte também cancela: assim ele não espera a transcrição inteira terminar.
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposing.Token);
+        cancellationToken = linked.Token;
 
         await _gate.WaitAsync(cancellationToken);
         try
@@ -114,9 +129,27 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        _disposing.Cancel();
+
+        // O gate só é liberado depois que o processador do Whisper.net terminou (o DisposeAsync dele espera
+        // o processamento nativo). Antes disso o modelo ainda está em uso.
+        if (!_gate.Wait(DisposeTimeout))
+        {
+            // O processo está terminando: deixar o modelo sem liberar é inofensivo; liberar em uso, não.
+            LogDisposeTimedOut(_logger, DisposeTimeout);
+            return;
+        }
+
         _cached?.Factory.Dispose();
         _cached = null;
+        _gate.Release();
         _gate.Dispose();
+        _disposing.Dispose();
     }
 
     private WhisperFactory GetOrCreateFactory(TranscriberSettings settings)
@@ -223,6 +256,9 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Modelo carregado: {ModelPath} (runtime {Runtime}, GPU solicitada: {UseGpu})")]
     private static partial void LogFactoryCreated(ILogger logger, string modelPath, RuntimeLibrary? runtime, bool useGpu);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "A transcrição não parou em {Timeout}; o modelo não será liberado")]
+    private static partial void LogDisposeTimedOut(ILogger logger, TimeSpan timeout);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Falha ao iniciar com GPU; usando CPU")]
     private static partial void LogGpuFallback(ILogger logger, Exception exception);

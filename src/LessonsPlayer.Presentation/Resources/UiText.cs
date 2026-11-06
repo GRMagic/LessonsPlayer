@@ -92,8 +92,26 @@ public static class UiText
 
     public static string PlaybackFailed(string reason) => $"A reprodução foi interrompida.\n\n{reason}";
 
-    public static string SubtitleWarnings(int count) =>
-        count == 1 ? "1 linha da legenda não foi reconhecida e foi ignorada." : $"{count} linhas da legenda não foram reconhecidas e foram ignoradas.";
+    /// <summary>Resumo dos problemas da legenda lida, ou <c>null</c> se não houver nenhum.</summary>
+    public static string? SubtitleWarnings(int ignoredLines, int correctedTimes)
+    {
+        var parts = new List<string>(2);
+        if (ignoredLines > 0)
+        {
+            parts.Add(ignoredLines == 1
+                ? "1 linha da legenda não foi reconhecida e foi ignorada"
+                : $"{ignoredLines} linhas da legenda não foram reconhecidas e foram ignoradas");
+        }
+
+        if (correctedTimes > 0)
+        {
+            parts.Add(correctedTimes == 1
+                ? "1 tempo com fim antes do início foi corrigido"
+                : $"{correctedTimes} tempos com fim antes do início foram corrigidos");
+        }
+
+        return parts.Count == 0 ? null : string.Join("; ", parts) + ".";
+    }
 
     public static string Saved(string path) => $"Legenda salva em {Path.GetFileName(path)}.";
 

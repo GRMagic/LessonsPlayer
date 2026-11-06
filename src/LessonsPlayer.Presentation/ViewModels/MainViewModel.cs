@@ -77,23 +77,23 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>Chamado ao fechar a janela. Retorna <c>false</c> se o usuário desistir de fechar.</summary>
-    public async Task<bool> PrepareToCloseAsync()
+    /// <summary>
+    /// Primeira etapa ao fechar a janela: pergunta sobre alterações não salvas.
+    /// Retorna <c>false</c> se o usuário desistir de fechar.
+    /// </summary>
+    public Task<bool> ConfirmCloseAsync() => ConfirmLeaveTranscriptAsync();
+
+    /// <summary>
+    /// Segunda etapa ao fechar: para a geração e espera ela terminar, porque o modelo nativo não pode ser
+    /// liberado enquanto calcula. Na CPU, com modelos grandes, isso pode levar alguns segundos (o Whisper só
+    /// para entre etapas). Depois para o áudio e grava as preferências.
+    /// </summary>
+    public async Task ShutdownAsync()
     {
-        if (!await ConfirmLeaveTranscriptAsync())
-        {
-            return false;
-        }
-
-        if (Transcription.IsRunning)
-        {
-            Transcription.GenerateCancelCommand.Execute(null);
-        }
-
+        await Transcription.CancelAndWaitAsync();
         _frameTimer.IsEnabled = false;
         Player.Unload();
         _settings.Flush();
-        return true;
     }
 
     /// <summary>Abre arquivos e/ou pastas (ex.: arrastar e soltar) e toca o primeiro áudio.</summary>
@@ -198,7 +198,7 @@ public sealed partial class MainViewModel : ObservableObject
             Transcript.Load(audioFilePath, result?.Transcript);
             if (result is { HasWarnings: true })
             {
-                StatusMessage = UiText.SubtitleWarnings(result.Warnings.Length);
+                StatusMessage = UiText.SubtitleWarnings(result.IgnoredLineCount, result.CorrectedTimeCount);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

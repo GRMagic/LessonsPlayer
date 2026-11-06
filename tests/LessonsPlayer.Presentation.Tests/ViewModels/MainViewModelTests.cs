@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using LessonsPlayer.Core.Abstractions;
 using LessonsPlayer.Core.Audio;
 using LessonsPlayer.Core.Playlist;
@@ -193,14 +194,57 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
-    public async Task PrepareToClose_flushes_settings_and_stops_timer()
+    public async Task Closing_flushes_settings_and_stops_timer()
     {
         await _vm.InitializeAsync([]);
         _timer.IsEnabled.ShouldBeTrue();
 
-        (await _vm.PrepareToCloseAsync()).ShouldBeTrue();
+        (await _vm.ConfirmCloseAsync()).ShouldBeTrue();
+        await _vm.ShutdownAsync();
 
         _timer.IsEnabled.ShouldBeFalse();
+    }
+
+    /// <summary>
+    /// Regressão: fechar durante uma geração só pedia o cancelamento, e o host liberava o modelo nativo com o
+    /// whisper.cpp ainda calculando (o processo caía com 0xC0000005).
+    /// </summary>
+    [Fact]
+    public async Task Shutdown_waits_for_a_running_generation_to_stop()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await _vm.OpenPathsAsync([@"C:ulas"]);
+        await _vm.NextTrackCommand.ExecuteAsync(null); // aula2, sem legenda
+        var started = new TaskCompletionSource();
+        var stopped = false;
+        _transcriber.TranscribeAsync(default!, default!, ct)
+            .ReturnsForAnyArgs(call => RunUntilCanceled(started, () => stopped = true, call.ArgAt<CancellationToken>(2)));
+        _ = _vm.Transcription.GenerateCommand.ExecuteAsync(null);
+        await started.Task.WaitAsync(ct);
+
+        (await _vm.ConfirmCloseAsync()).ShouldBeTrue();
+        await _vm.ShutdownAsync();
+
+        stopped.ShouldBeTrue("o transcritor precisa ter parado antes de o app liberar os recursos");
+        _vm.Transcription.IsRunning.ShouldBeFalse();
+        _subtitles.Saved.ShouldNotContainKey(Aula2);
+    }
+
+    /// <summary>Transcritor que só para quando cancelado, e ainda leva um tempo para parar (como o whisper.cpp).</summary>
+    private static async IAsyncEnumerable<RecognizedSegment> RunUntilCanceled(
+        TaskCompletionSource started, Action onStopped, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        try
+        {
+            started.TrySetResult();
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            yield break;
+        }
+        finally
+        {
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+            onStopped();
+        }
     }
 
     private static async IAsyncEnumerable<RecognizedSegment> Segments(params RecognizedSegment[] segments)

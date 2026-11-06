@@ -48,11 +48,16 @@ public partial class MainWindow : Window
 
         // Cancela este fechamento, pergunta (pode salvar de forma assíncrona) e fecha de novo se confirmado.
         e.Cancel = true;
-        if (await _viewModel.PrepareToCloseAsync())
+        if (!await _viewModel.ConfirmCloseAsync())
         {
-            _closeConfirmed = true;
-            await Dispatcher.InvokeAsync(Close); // Close() não pode ser chamado dentro do próprio Closing
+            return;
         }
+
+        // Parar uma geração na CPU pode levar alguns segundos: a janela some antes, para não parecer travada.
+        Hide();
+        await _viewModel.ShutdownAsync();
+        _closeConfirmed = true;
+        await Dispatcher.InvokeAsync(Close); // Close() não pode ser chamado dentro do próprio Closing
     }
 
     private void OnDragOver(object sender, DragEventArgs e)

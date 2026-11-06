@@ -236,7 +236,7 @@ public static partial class SubtitleTxtFormat
         {
             if (_words.Count > 0)
             {
-                segments.Add(new Segment(_words.OrderBy(w => w.Start)));
+                segments.Add(new Segment(GiveDurationToInstantWords([.. _words.OrderBy(w => w.Start)], end)));
                 return;
             }
 
@@ -255,6 +255,25 @@ public static partial class SubtitleTxtFormat
             }
 
             segments.Add(new Segment(TimeDistribution.Distribute(start, segmentEnd, tokens)));
+        }
+
+        /// <summary>
+        /// Uma palavra sem duração (fim igual ao início, ou invertido e corrigido) nunca ficaria destacada no
+        /// karaokê. Ela passa a ir até o início da palavra seguinte, ou até o fim do cabeçalho se for a última.
+        /// </summary>
+        private static List<Word> GiveDurationToInstantWords(List<Word> words, TimeSpan headerEnd)
+        {
+            for (var i = 0; i < words.Count; i++)
+            {
+                var word = words[i];
+                var limit = i + 1 < words.Count ? words[i + 1].Start : headerEnd;
+                if (word.End <= word.Start && limit > word.Start)
+                {
+                    words[i] = word.WithTiming(word.Start, limit);
+                }
+            }
+
+            return words;
         }
     }
 }
