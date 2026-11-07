@@ -86,6 +86,13 @@ Feito em 2026-11-07. O botão de liga/desliga **Autoplay next** fica ao lado dos
 - Desligado (o padrão), o player para no fim da aula, e a legenda dela continua na tela. O Play recomeça a aula do início.
 - Antes o avanço era sempre automático.
 
+### Busca de aulas
+Feito em 2026-11-07. A caixa acima da playlist (`Ctrl+F`; `Esc` limpa) procura nos nomes das aulas e no texto das legendas salvas.
+- **Como casa (`SearchQuery`):** sem acentos e sem maiúsculas, por palavras: todas as palavras digitadas precisam aparecer, em qualquer ordem ("licao 3" acha "Lição 03").
+- **Nomes:** a playlist mostra só as aulas que casam. A navegação e o Autoplay continuam usando a pasta inteira.
+- **Legendas:** embaixo da playlist aparecem as frases encontradas (até 200), com a aula e o horário. O clique abre a aula, sem dar play, e posiciona o áudio no início da frase, como o clique no horário. A frase é achada pelo tempo, porque a aula aberta pode ter edições não salvas.
+- **Desempenho:** as legendas lidas ficam em memória; a primeira busca lê os arquivos fora da UI. Uma legenda é relida quando é salva, gerada ou excluída, e o cache é refeito ao trocar de pasta. Cada tecla cancela a busca anterior.
+
 ## A investigar
 
 ### Palavras presas aos limites de trechos de 1 s
@@ -128,11 +135,6 @@ Em 2026-11-07, às 10:04, a suíte de integração caiu com 0xC0000005 no `Whisp
 - **A verificar:** repetir a queda de propósito (na bateria, forçar a espera durante uma geração), e ver se ela some na tomada.
 
 ## Próximas
-
-### Busca de aulas
-Uma caixa de busca acima da playlist que filtra pelo nome da aula (sem acento e sem maiúsculas: "licao" acha "Lição").
-- Opcional: "buscar também no conteúdo" das aulas que têm legenda, mostrando o trecho encontrado. O clique abre a aula e vai até a frase.
-- Para a busca no conteúdo, um índice simples em memória (texto dos `.subtitle.txt` da pasta, recarregado quando uma legenda muda) basta para centenas de aulas.
 
 ### Salvar habilitado só quando há o que salvar
 O `SaveCommand` passa a depender de `IsDirty` (com `NotifyCanExecuteChanged` no evento `Changed` do editor).

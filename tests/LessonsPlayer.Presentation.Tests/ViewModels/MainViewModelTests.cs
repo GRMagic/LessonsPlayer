@@ -40,13 +40,15 @@ public sealed class MainViewModelTests
         var generator = new SubtitleGenerator(models, decoder, Substitute.For<ISpeechDetector>(), _transcriber, TimeProvider.System);
 
         var dispatcher = new ImmediateDispatcher();
+        var playlist = new PlaylistViewModel(_playlistSource, _subtitles);
         _vm = new MainViewModel(
             new PlayerViewModel(_player, dispatcher, settings, _keepAwake),
-            new PlaylistViewModel(_playlistSource, _subtitles),
+            playlist,
             new TranscriptViewModel(_subtitles, _dialogs, NullLogger<TranscriptViewModel>.Instance),
             new TranscriptionViewModel(
                 generator, _subtitles, models, Substitute.For<IGpuDetector>(), _keepAwake, _dialogs, settings,
                 NullLogger<TranscriptionViewModel>.Instance),
+            new LessonSearchViewModel(playlist, _subtitles, NullLogger<LessonSearchViewModel>.Instance),
             _dialogs,
             _subtitles,
             settings,
@@ -95,6 +97,67 @@ public sealed class MainViewModelTests
         _player.CurrentFile.ShouldBe(Aula2);
         _player.State.ShouldBe(PlaybackState.Playing);
         _vm.Playlist.CurrentItem!.FilePath.ShouldBe(Aula2);
+    }
+
+    [Fact]
+    public async Task Search_filters_the_playlist_by_name_but_navigation_keeps_the_whole_list()
+    {
+        await _vm.OpenPathsAsync([@"C:\aulas"]);
+
+        _vm.Search.Query = "AULA2";
+
+        _vm.Playlist.VisibleItems.ShouldHaveSingleItem().FilePath.ShouldBe(Aula2);
+        _vm.Playlist.Items.Count.ShouldBe(2);
+        _vm.Playlist.Next()!.FilePath.ShouldBe(Aula2, "a próxima é da playlist inteira, não da lista filtrada");
+
+        _vm.Search.Query = "aula9";
+        _vm.Playlist.HasNoNameMatches.ShouldBeTrue();
+
+        _vm.Search.ClearCommand.Execute(null);
+        _vm.Playlist.VisibleItems.Count.ShouldBe(2);
+        _vm.Search.HasQuery.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Search_finds_text_in_saved_subtitles_and_a_match_opens_the_lesson_there()
+    {
+        _subtitles.Saved[Aula2] = new Core.Subtitles.Transcript(Core.Subtitles.TranscriptMetadata.Empty,
+        [
+            new Core.Subtitles.Segment([new Core.Subtitles.Word(Ms(0), Ms(500), "Good"), new Core.Subtitles.Word(Ms(500), Ms(1000), "morning.")]),
+            new Core.Subtitles.Segment([new Core.Subtitles.Word(Ms(1500), Ms(2000), "Present"), new Core.Subtitles.Word(Ms(2000), Ms(2600), "perfect.")]),
+        ]);
+        await _vm.OpenPathsAsync([@"C:\aulas"]); // abre a aula1
+
+        _vm.Search.Query = "perfect";
+        await _vm.Search.Completion;
+
+        var match = _vm.Search.SubtitleMatches.ShouldHaveSingleItem();
+        match.Lesson.FilePath.ShouldBe(Aula2);
+        match.StartText.ShouldBe("0:01");
+        _vm.Search.SubtitleMatchesHeader.ShouldBe("1 match in the subtitles");
+
+        await _vm.OpenSubtitleMatchCommand.ExecuteAsync(match);
+
+        _player.CurrentFile.ShouldBe(Aula2);
+        _player.Seeks.ShouldContain(Ms(1500));
+        _vm.Transcript.SelectedWord!.Text.ShouldBe("Present");
+        _player.State.ShouldNotBe(PlaybackState.Playing, "abrir pela busca só posiciona; quem dá play é o professor");
+    }
+
+    [Fact]
+    public async Task Search_rereads_a_subtitle_after_it_is_saved()
+    {
+        await _vm.OpenPathsAsync([@"C:\aulas"]);
+        _vm.Search.Query = "pessoal";
+        await _vm.Search.Completion;
+        _vm.Search.SubtitleMatches.ShouldHaveSingleItem();
+
+        _vm.Transcript.DeleteWordCommand.Execute(_vm.Transcript.Segments[0].Words[1]); // "pessoal"
+        await _vm.Transcript.SaveAsync(TestContext.Current.CancellationToken);
+        await _vm.Search.Completion;
+
+        _vm.Search.SubtitleMatches.ShouldBeEmpty();
+        _vm.Search.SubtitleMatchesHeader.ShouldBe("No matches in the subtitles.");
     }
 
     [Fact]

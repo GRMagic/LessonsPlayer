@@ -176,11 +176,61 @@
       </Grid.ColumnDefinitions>
 
       <Border Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
-        <DockPanel DataContext="{Binding Playlist}">
+        <DockPanel>
           <TextBlock DockPanel.Dock="Top" Margin="14,10,12,6" FontWeight="SemiBold"
-                     Text="{Binding FolderName}" TextTrimming="CharacterEllipsis" />
+                     Text="{Binding Playlist.FolderName}" TextTrimming="CharacterEllipsis" />
+
+          <!-- Busca: nomes das aulas e texto das legendas (Ctrl+F leva o foco para cá; Esc limpa). -->
+          <Grid DockPanel.Dock="Top" Margin="10,0,10,8" DataContext="{Binding Search}">
+            <TextBox x:Name="SearchBox" Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
+                     Padding="6,4,28,4" VerticalContentAlignment="Center"
+                     ToolTip="{x:Static res:UiText.SearchHint}"
+                     AutomationProperties.Name="{x:Static res:UiText.SearchPlaceholder}"
+                     AutomationProperties.HelpText="{x:Static res:UiText.SearchHint}">
+              <TextBox.InputBindings>
+                <KeyBinding Key="Escape" Command="{Binding ClearCommand}" />
+              </TextBox.InputBindings>
+            </TextBox>
+            <TextBlock Margin="9,0,28,0" VerticalAlignment="Center" IsHitTestVisible="False"
+                       Text="{x:Static res:UiText.SearchPlaceholder}" TextTrimming="CharacterEllipsis">
+              <TextBlock.Style>
+                <Style TargetType="{x:Type TextBlock}" BasedOn="{StaticResource Muted}">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding HasQuery}" Value="False">
+                      <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
+            <Button Style="{StaticResource FlatButton}" HorizontalAlignment="Right" Margin="0,0,2,0" Padding="6,3"
+                    Command="{Binding ClearCommand}" ToolTip="{x:Static res:UiText.ClearSearch}"
+                    AutomationProperties.Name="{x:Static res:UiText.ClearSearch}"
+                    Visibility="{Binding HasQuery, Converter={StaticResource BoolToVisibility}}">
+              <TextBlock Style="{StaticResource Icon}" FontSize="10" Text="{StaticResource GlyphCancel}" />
+            </Button>
+          </Grid>
+
           <Grid>
-            <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}"
+            <Grid.RowDefinitions>
+              <RowDefinition Height="*" />
+              <!-- Os trechos das legendas só ocupam espaço enquanto há busca. -->
+              <RowDefinition>
+                <RowDefinition.Style>
+                  <Style TargetType="{x:Type RowDefinition}">
+                    <Setter Property="Height" Value="0" />
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding Search.HasQuery}" Value="True">
+                        <Setter Property="Height" Value="1.4*" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </RowDefinition.Style>
+              </RowDefinition>
+            </Grid.RowDefinitions>
+
+            <ListBox DataContext="{Binding Playlist}" ItemsSource="{Binding VisibleItems}" SelectedItem="{Binding SelectedItem}"
                      BorderThickness="0" Background="Transparent" Padding="4,0"
                      HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
               <ListBox.Resources>
@@ -237,7 +287,47 @@
             <TextBlock Margin="16" HorizontalAlignment="Center" VerticalAlignment="Center"
                        TextAlignment="Center" TextWrapping="Wrap" Style="{StaticResource Muted}"
                        Text="{x:Static res:UiText.PlaylistEmpty}"
-                       Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}" />
+                       Visibility="{Binding Playlist.IsEmpty, Converter={StaticResource BoolToVisibility}}" />
+            <TextBlock Margin="16" HorizontalAlignment="Center" VerticalAlignment="Center"
+                       TextAlignment="Center" TextWrapping="Wrap" Style="{StaticResource Muted}"
+                       Text="{x:Static res:UiText.NoLessonNamesMatch}"
+                       Visibility="{Binding Playlist.HasNoNameMatches, Converter={StaticResource BoolToVisibility}}" />
+
+            <!-- Trechos das legendas que casam com a busca: o clique abre a aula e vai até o trecho. -->
+            <DockPanel Grid.Row="1" DataContext="{Binding Search}"
+                       Visibility="{Binding HasQuery, Converter={StaticResource BoolToVisibility}}">
+              <Border DockPanel.Dock="Top" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="14,8,12,4">
+                <TextBlock FontWeight="SemiBold" Text="{Binding SubtitleMatchesHeader}" TextTrimming="CharacterEllipsis" />
+              </Border>
+              <ListBox x:Name="SubtitleMatchList" ItemsSource="{Binding SubtitleMatches}"
+                       BorderThickness="0" Background="Transparent" Padding="4,0"
+                       HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                       VirtualizingPanel.IsVirtualizing="True">
+                <ListBox.ItemContainerStyle>
+                  <Style TargetType="{x:Type ListBoxItem}">
+                    <Setter Property="AutomationProperties.Name" Value="{Binding}" />
+                  </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.InputBindings>
+                  <KeyBinding Key="Enter" CommandParameter="{Binding SelectedItem, ElementName=SubtitleMatchList}"
+                              Command="{Binding DataContext.OpenSubtitleMatchCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" />
+                </ListBox.InputBindings>
+                <ListBox.ItemTemplate>
+                  <DataTemplate DataType="{x:Type vm:SubtitleMatchViewModel}">
+                    <StackPanel Background="Transparent" Margin="0,3" Cursor="Hand">
+                      <StackPanel.InputBindings>
+                        <MouseBinding Gesture="LeftClick" CommandParameter="{Binding}"
+                                      Command="{Binding DataContext.OpenSubtitleMatchCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" />
+                      </StackPanel.InputBindings>
+                      <TextBlock Style="{StaticResource Muted}" FontSize="11" TextTrimming="CharacterEllipsis">
+                        <Run Text="{Binding LessonTitle, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding StartText, Mode=OneWay}" />
+                      </TextBlock>
+                      <TextBlock Text="{Binding Text}" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="40" />
+                    </StackPanel>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </DockPanel>
           </Grid>
         </DockPanel>
       </Border>

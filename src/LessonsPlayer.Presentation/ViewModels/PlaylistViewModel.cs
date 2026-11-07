@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LessonsPlayer.Core.Abstractions;
 using LessonsPlayer.Core.Playlist;
+using LessonsPlayer.Core.Search;
 
 namespace LessonsPlayer.Presentation.ViewModels;
 
@@ -35,9 +36,29 @@ public sealed partial class PlaylistViewModel(IPlaylistSource source, ISubtitleS
     [ObservableProperty]
     private string? _folderName;
 
+    /// <summary>Filtro pelo nome da aula (vazio = todas).</summary>
+    private SearchQuery _filter = SearchQuery.Empty;
+
+    /// <summary>A playlist inteira, que a navegação (anterior/próxima, autoplay) percorre.</summary>
     public ObservableCollection<PlaylistItemViewModel> Items { get; } = [];
 
+    /// <summary>As aulas mostradas na lista: as de <see cref="Items"/> cujo nome casa com a busca.</summary>
+    public ObservableCollection<PlaylistItemViewModel> VisibleItems { get; } = [];
+
     public bool IsEmpty => Items.Count == 0;
+
+    /// <summary>Há aulas, mas nenhum nome casa com a busca.</summary>
+    public bool HasNoNameMatches => !IsEmpty && VisibleItems.Count == 0;
+
+    /// <summary>A playlist foi trocada (outra pasta ou outros arquivos).</summary>
+    public event EventHandler? Reloaded;
+
+    public void Filter(SearchQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        _filter = query;
+        RebuildVisibleItems();
+    }
 
     public void LoadFolder(string folderPath) =>
         Replace(source.FromFolder(folderPath), Path.GetFileName(Path.TrimEndingDirectorySeparator(folderPath)));
@@ -98,5 +119,18 @@ public sealed partial class PlaylistViewModel(IPlaylistSource source, ISubtitleS
 
         FolderName = folderName;
         OnPropertyChanged(nameof(IsEmpty));
+        RebuildVisibleItems();
+        Reloaded?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void RebuildVisibleItems()
+    {
+        VisibleItems.Clear();
+        foreach (var item in Items.Where(i => _filter.Matches(i.Title)))
+        {
+            VisibleItems.Add(item);
+        }
+
+        OnPropertyChanged(nameof(HasNoNameMatches));
     }
 }
