@@ -166,6 +166,43 @@ public sealed class TranscriptViewModelTests
     }
 
     [Fact]
+    public async Task Save_is_enabled_only_when_there_is_something_to_save()
+    {
+        _vm.SaveCommand.CanExecute(null).ShouldBeFalse("acabou de carregar");
+        var notifications = 0;
+        _vm.SaveCommand.CanExecuteChanged += (_, _) => notifications++;
+
+        _vm.DeleteWordCommand.Execute(WordAt(0, 0));
+        _vm.SaveCommand.CanExecute(null).ShouldBeTrue();
+        notifications.ShouldBeGreaterThan(0, "o botão precisa saber que mudou");
+
+        await _vm.SaveCommand.ExecuteAsync(null);
+        _vm.SaveCommand.CanExecute(null).ShouldBeFalse("acabou de salvar");
+
+        _vm.UndoCommand.Execute(null);
+        _vm.SaveCommand.CanExecute(null).ShouldBeTrue("desfazer depois de salvar volta a ter o que salvar");
+
+        _vm.RedoCommand.Execute(null);
+        _vm.SaveCommand.CanExecute(null).ShouldBeFalse("refazer volta ao que está gravado");
+    }
+
+    [Fact]
+    public void A_generated_subtitle_that_could_not_be_saved_can_be_saved_right_away()
+    {
+        _vm.Load(AudioPath, TwoSegments(), isSaved: false);
+
+        _vm.SaveCommand.CanExecute(null).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Without_audio_there_is_nothing_to_save()
+    {
+        _vm.Load(null, null);
+
+        _vm.SaveCommand.CanExecute(null).ShouldBeFalse();
+    }
+
+    [Fact]
     public void Clicking_the_segment_time_goes_to_its_first_word()
     {
         TimeSpan? requested = null;
