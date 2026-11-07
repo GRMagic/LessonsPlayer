@@ -69,3 +69,47 @@ internal sealed class InMemorySubtitleStore : ISubtitleStore
     public bool Delete(string audioFilePath) =>
         FailOnDelete ? throw new UnauthorizedAccessException("Read-only") : Saved.Remove(audioFilePath);
 }
+
+/// <summary>Registra os pedidos de energia ativos (adquiridos e ainda não descartados).</summary>
+internal sealed class RecordingKeepAwake : IKeepAwake
+{
+    private readonly Lock _lock = new();
+    private readonly List<KeepAwakeReason> _active = [];
+
+    public IReadOnlyList<KeepAwakeReason> Active
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return [.. _active];
+            }
+        }
+    }
+
+    public IDisposable Acquire(KeepAwakeReason reason)
+    {
+        lock (_lock)
+        {
+            _active.Add(reason);
+        }
+
+        return new Request(this, reason);
+    }
+
+    private sealed class Request(RecordingKeepAwake owner, KeepAwakeReason reason) : IDisposable
+    {
+        private int _disposed;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+            {
+                lock (owner._lock)
+                {
+                    owner._active.Remove(reason);
+                }
+            }
+        }
+    }
+}

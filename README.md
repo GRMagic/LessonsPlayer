@@ -16,6 +16,8 @@ A interface é em inglês, porque o programa é usado nas aulas de inglês, ao l
 3. Dê play. Clique em qualquer palavra para ir até ela, ou no horário à esquerda de uma frase para ir ao início dela.
 4. Ao terminar uma aula, o player para nela. Para seguir direto para a próxima da playlist, ligue **Autoplay next**, ao lado dos botões do player; a escolha fica salva.
 
+Enquanto uma aula toca, a tela não apaga, porque a turma acompanha a legenda. Enquanto uma legenda é gerada, o Windows também não entra em espera. Os dois pedidos acabam sozinhos quando a aula para ou a geração termina, e também se o programa fechar ou cair. Nenhuma configuração de energia do Windows é alterada.
+
 | Ação | Atalho |
 |---|---|
 | Tocar / pausar | `Espaço` |

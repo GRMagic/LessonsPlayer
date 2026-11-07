@@ -23,6 +23,7 @@ public sealed class MainViewModelTests
     private readonly IPlaylistSource _playlistSource = Substitute.For<IPlaylistSource>();
     private readonly ITranscriber _transcriber = Substitute.For<ITranscriber>();
     private readonly ManualFrameTimer _timer = new();
+    private readonly RecordingKeepAwake _keepAwake = new();
     private readonly MainViewModel _vm;
 
     public MainViewModelTests()
@@ -40,11 +41,12 @@ public sealed class MainViewModelTests
 
         var dispatcher = new ImmediateDispatcher();
         _vm = new MainViewModel(
-            new PlayerViewModel(_player, dispatcher, settings),
+            new PlayerViewModel(_player, dispatcher, settings, _keepAwake),
             new PlaylistViewModel(_playlistSource, _subtitles),
             new TranscriptViewModel(_subtitles, _dialogs, NullLogger<TranscriptViewModel>.Instance),
             new TranscriptionViewModel(
-                generator, _subtitles, models, Substitute.For<IGpuDetector>(), _dialogs, settings, NullLogger<TranscriptionViewModel>.Instance),
+                generator, _subtitles, models, Substitute.For<IGpuDetector>(), _keepAwake, _dialogs, settings,
+                NullLogger<TranscriptionViewModel>.Instance),
             _dialogs,
             _subtitles,
             settings,

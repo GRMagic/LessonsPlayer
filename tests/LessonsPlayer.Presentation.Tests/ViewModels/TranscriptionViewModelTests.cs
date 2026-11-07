@@ -24,6 +24,7 @@ public sealed class TranscriptionViewModelTests
     private readonly InMemorySettingsStore _settingsStore = new();
     private readonly IModelStore _models = Substitute.For<IModelStore>();
     private readonly IAudioDecoder _decoder = Substitute.For<IAudioDecoder>();
+    private readonly RecordingKeepAwake _keepAwake = new();
     private readonly TranscriptionViewModel _vm;
 
     public TranscriptionViewModelTests()
@@ -40,7 +41,7 @@ public sealed class TranscriptionViewModelTests
         detector.FindGpuAsync(default).ReturnsForAnyArgs(detectedGpu);
         return new TranscriptionViewModel(
             new SubtitleGenerator(_models, _decoder, Substitute.For<ISpeechDetector>(), _transcriber, TimeProvider.System),
-            _subtitles, _models, detector, _dialogs, new AppSettingsService(_settingsStore),
+            _subtitles, _models, detector, _keepAwake, _dialogs, new AppSettingsService(_settingsStore),
             NullLogger<TranscriptionViewModel>.Instance)
         {
             TargetAudioFilePath = AudioPath,
@@ -56,6 +57,32 @@ public sealed class TranscriptionViewModelTests
 
         _transcriber.Settings!.Gpu.ShouldBe(Gpu);
         _vm.StatusText.ShouldNotBeNull().ShouldContain("generated on the GPU (NVIDIA GeForce GTX 1650)");
+    }
+
+    /// <summary>Na espera do Windows a GPU pode sumir no meio da geração: o sistema fica acordado só enquanto ela roda.</summary>
+    [Fact]
+    public async Task Keeps_the_system_awake_only_while_generating()
+    {
+        var running = _vm.GenerateCommand.ExecuteAsync(null);
+        await _transcriber.Started.WaitAsync(TestContext.Current.CancellationToken);
+
+        _keepAwake.Active.ShouldBe([KeepAwakeReason.GeneratingSubtitles]);
+
+        _transcriber.Release();
+        await running;
+        _keepAwake.Active.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Canceling_the_generation_also_lets_the_system_sleep_again()
+    {
+        var running = _vm.GenerateCommand.ExecuteAsync(null);
+        await _transcriber.Started.WaitAsync(TestContext.Current.CancellationToken);
+
+        _vm.GenerateCancelCommand.Execute(null);
+        await running;
+
+        _keepAwake.Active.ShouldBeEmpty();
     }
 
     [Fact]
