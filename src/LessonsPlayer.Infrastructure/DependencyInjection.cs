@@ -3,6 +3,7 @@ using LessonsPlayer.Core.Transcription;
 using LessonsPlayer.Infrastructure.Audio;
 using LessonsPlayer.Infrastructure.Http;
 using LessonsPlayer.Infrastructure.Playlist;
+using LessonsPlayer.Infrastructure.Power;
 using LessonsPlayer.Infrastructure.Storage;
 using LessonsPlayer.Infrastructure.Whisper;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,6 +25,7 @@ public static class DependencyInjection
         services.AddSingleton<ISpeechDetector, SileroSpeechDetector>();
         services.AddSingleton<ITranscriber, WhisperNetTranscriber>();
         services.AddSingleton<IGpuDetector, VulkanGpuDetector>();
+        services.AddSingleton<IKeepAwake, WindowsKeepAwake>();
         services.AddSingleton<ISubtitleStore, TxtSubtitleStore>();
         services.AddSingleton<ISettingsStore, JsonSettingsStore>();
         services.AddSingleton<IPlaylistSource, FileSystemPlaylistSource>();

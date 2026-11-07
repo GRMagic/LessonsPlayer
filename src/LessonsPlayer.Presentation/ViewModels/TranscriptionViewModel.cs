@@ -60,6 +60,11 @@ public sealed partial class TranscriptionViewModel : ObservableObject
     /// <summary>A GPU detectada ao abrir o programa, ou <c>null</c> se não houver (a transcrição usa a CPU).</summary>
     private readonly Task<GpuDevice?> _gpu;
 
+    private readonly IKeepAwake _keepAwake;
+
+    /// <summary>Pedido para o sistema não dormir durante a geração (na espera, a GPU pode sumir no meio dela).</summary>
+    private IDisposable? _generatingRequest;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanChooseLanguage))]
     private ModelOption _selectedModel;
@@ -96,10 +101,12 @@ public sealed partial class TranscriptionViewModel : ObservableObject
         ISubtitleStore subtitleStore,
         IModelStore modelStore,
         IGpuDetector gpuDetector,
+        IKeepAwake keepAwake,
         IDialogService dialogs,
         AppSettingsService settings,
         ILogger<TranscriptionViewModel> logger)
     {
+        _keepAwake = keepAwake;
         // Começa já, em segundo plano (~1 s carregando os drivers Vulkan): quando o usuário pedir a primeira
         // legenda, a resposta quase sempre já chegou.
         _gpu = gpuDetector.FindGpuAsync(CancellationToken.None);
@@ -256,6 +263,19 @@ public sealed partial class TranscriptionViewModel : ObservableObject
             || (value.Stage == TranscriptionStage.DownloadingModel && value.Fraction >= 1);
         Progress = value.Fraction;
         StatusText = UiText.Progress(value);
+    }
+
+    partial void OnIsRunningChanged(bool value)
+    {
+        if (value)
+        {
+            _generatingRequest ??= _keepAwake.Acquire(KeepAwakeReason.GeneratingSubtitles);
+        }
+        else
+        {
+            _generatingRequest?.Dispose();
+            _generatingRequest = null;
+        }
     }
 
     /// <summary>

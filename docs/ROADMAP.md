@@ -123,7 +123,9 @@ Em 2026-11-07, às 10:04, a suíte de integração caiu com 0xC0000005 no `Whisp
 - **Opções:**
   - pedir ao Windows para não dormir enquanto gera (`SetThreadExecutionState` com `ES_SYSTEM_REQUIRED` e `ES_DISPLAY_REQUIRED`). Na reprodução, `ES_DISPLAY_REQUIRED` também faz sentido: a turma acompanha a legenda na tela;
   - o Whisper num processo filho, que pode cair ou ser encerrado sem levar o programa junto.
-- **A verificar:** repetir a queda de propósito (na bateria, forçar a espera durante uma geração), e ver se ela some na tomada ou com o pedido para não dormir.
+- **Feito em 2026-11-07, para o caso comum (tela apagada por inatividade):** o programa pede ao Windows para não dormir nem apagar a tela enquanto gera uma legenda, e para não apagar a tela enquanto toca uma aula. Usa `PowerCreateRequest`/`PowerSetRequest` (`WindowsKeepAwake`); o pedido é um handle do processo e some sozinho quando o processo termina, cai ou é encerrado. Nenhuma configuração de energia é alterada. O `WindowsKeepAwakeTests` lê o estado do sistema (`CallNtPowerInformation`) e confere que os pedidos valem.
+- **Ainda vale:** fechar a tampa ou apertar o botão de energia põe o Windows em espera mesmo com o pedido. Para esse caso, falta o Whisper num processo filho.
+- **A verificar:** repetir a queda de propósito (na bateria, forçar a espera durante uma geração), e ver se ela some na tomada.
 
 ## Próximas
 

@@ -10,11 +10,12 @@ public sealed class PlayerViewModelTests
 {
     private readonly FakeAudioPlayer _player = new();
     private readonly InMemorySettingsStore _settingsStore = new();
+    private readonly RecordingKeepAwake _keepAwake = new();
     private readonly PlayerViewModel _vm;
 
     public PlayerViewModelTests()
     {
-        _vm = new PlayerViewModel(_player, new ImmediateDispatcher(), new AppSettingsService(_settingsStore));
+        _vm = new PlayerViewModel(_player, new ImmediateDispatcher(), new AppSettingsService(_settingsStore), _keepAwake);
         _vm.Load("a.mp3");
     }
 
@@ -102,7 +103,7 @@ public sealed class PlayerViewModelTests
     public void Volume_is_applied_and_kept_in_settings()
     {
         var settings = new AppSettingsService(_settingsStore);
-        var vm = new PlayerViewModel(_player, new ImmediateDispatcher(), settings);
+        var vm = new PlayerViewModel(_player, new ImmediateDispatcher(), settings, new RecordingKeepAwake());
 
         vm.Volume = 0.3;
 
@@ -119,7 +120,24 @@ public sealed class PlayerViewModelTests
 
         _settingsStore.Stored.AutoAdvance.ShouldBeTrue();
         using var player = new FakeAudioPlayer();
-        new PlayerViewModel(player, new ImmediateDispatcher(), new AppSettingsService(_settingsStore)).AutoAdvance.ShouldBeTrue();
+        new PlayerViewModel(player, new ImmediateDispatcher(), new AppSettingsService(_settingsStore), new RecordingKeepAwake()).AutoAdvance.ShouldBeTrue();
+    }
+
+    /// <summary>A turma acompanha a legenda: enquanto toca, a tela não apaga; pausado ou no fim, volta ao normal.</summary>
+    [Fact]
+    public void Keeps_the_screen_on_only_while_playing()
+    {
+        _keepAwake.Active.ShouldBeEmpty();
+
+        _vm.PlayPauseCommand.Execute(null);
+        _keepAwake.Active.ShouldBe([Core.Abstractions.KeepAwakeReason.Playing]);
+
+        _vm.PlayPauseCommand.Execute(null); // pausa
+        _keepAwake.Active.ShouldBeEmpty();
+
+        _vm.PlayPauseCommand.Execute(null);
+        _player.SimulateCompleted();
+        _keepAwake.Active.ShouldBeEmpty("a aula terminou");
     }
 
     [Fact]

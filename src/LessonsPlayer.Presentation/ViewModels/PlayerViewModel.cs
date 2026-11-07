@@ -14,7 +14,11 @@ public sealed partial class PlayerViewModel : ObservableObject
     private readonly IAudioPlayer _player;
     private readonly IUiDispatcher _ui;
     private readonly AppSettingsService _settings;
+    private readonly IKeepAwake _keepAwake;
     private bool _isUpdatingFromPlayer;
+
+    /// <summary>Pedido para a tela não apagar enquanto toca (a turma acompanha a legenda).</summary>
+    private IDisposable? _playingRequest;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PositionText))]
@@ -42,11 +46,12 @@ public sealed partial class PlayerViewModel : ObservableObject
     [ObservableProperty]
     private bool _autoAdvance;
 
-    public PlayerViewModel(IAudioPlayer player, IUiDispatcher ui, AppSettingsService settings)
+    public PlayerViewModel(IAudioPlayer player, IUiDispatcher ui, AppSettingsService settings, IKeepAwake keepAwake)
     {
         _player = player;
         _ui = ui;
         _settings = settings;
+        _keepAwake = keepAwake;
         _volume = settings.Current.Volume;
         _autoAdvance = settings.Current.AutoAdvance;
         _player.Volume = (float)_volume;
@@ -170,6 +175,19 @@ public sealed partial class PlayerViewModel : ObservableObject
     {
         _player.Volume = (float)value;
         _settings.Update(s => s with { Volume = (float)value });
+    }
+
+    partial void OnIsPlayingChanged(bool value)
+    {
+        if (value)
+        {
+            _playingRequest ??= _keepAwake.Acquire(KeepAwakeReason.Playing);
+        }
+        else
+        {
+            _playingRequest?.Dispose();
+            _playingRequest = null;
+        }
     }
 
     partial void OnAutoAdvanceChanged(bool value) =>
