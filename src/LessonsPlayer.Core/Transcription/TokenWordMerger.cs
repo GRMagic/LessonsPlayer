@@ -37,20 +37,20 @@ public static class TokenWordMerger
 
         var segmentStart = segment.Start;
         var segmentEnd = segment.End < segmentStart ? segmentStart : segment.End;
-        var tokenWords = GroupTokensIntoWords(segment.Tokens, segmentStart, segmentEnd);
+        var tokenWords = GroupTokensIntoWords(segment.Tokens);
 
         TimeSpan[] starts;
         TimeSpan?[] ends;
         if (tokenWords.Count == textWords.Length)
         {
-            starts = [.. tokenWords.Select(w => w.Start)];
-            ends = [.. tokenWords.Select(w => w.End)];
+            starts = [.. tokenWords.Select(w => Clamp(w.Start, segmentStart, segmentEnd))];
+            ends = [.. tokenWords.Select(w => w.End is { } end ? Clamp(end, segmentStart, segmentEnd) : (TimeSpan?)null)];
         }
         else
         {
             starts = tokenWords.Count == 0
                 ? [.. TimeDistribution.Distribute(segmentStart, segmentEnd, textWords).Select(w => w.Start)]
-                : InterpolateByCharacterPosition(tokenWords, textWords, segmentEnd);
+                : InterpolateByCharacterPosition(tokenWords, textWords, segmentStart, segmentEnd);
             ends = new TimeSpan?[textWords.Length]; // sem correspondência confiável: termina onde a próxima começa
         }
 
@@ -99,9 +99,11 @@ public static class TokenWordMerger
             || (t.StartsWith("<|", StringComparison.Ordinal) && t.EndsWith("|>", StringComparison.Ordinal));
     }
 
-    /// <summary>Junta tokens em palavras: um token com espaço inicial começa uma palavra nova.</summary>
-    private static List<TokenWord> GroupTokensIntoWords(
-        ImmutableArray<RecognizedToken> tokens, TimeSpan segmentStart, TimeSpan segmentEnd)
+    /// <summary>
+    /// Junta tokens em palavras: um token com espaço inicial começa uma palavra nova. Os tempos saem como o
+    /// alinhamento os deu, sem limitar ao trecho (o DTW às vezes põe uma palavra fora dele).
+    /// </summary>
+    internal static List<TokenWord> GroupTokensIntoWords(ImmutableArray<RecognizedToken> tokens)
     {
         var words = new List<TokenWord>();
         if (tokens.IsDefaultOrEmpty)
@@ -111,8 +113,9 @@ public static class TokenWordMerger
 
         TimeSpan? previousTokenEnd = null;
         var startNewWord = true;
-        foreach (var token in tokens)
+        for (var index = 0; index < tokens.Length; index++)
         {
+            var token = tokens[index];
             if (string.IsNullOrEmpty(token.Text) || IsSpecialToken(token.Text))
             {
                 continue;
@@ -129,8 +132,7 @@ public static class TokenWordMerger
 
             if (startNewWord || char.IsWhiteSpace(token.Text[0]) || words.Count == 0)
             {
-                var start = Clamp(previousTokenEnd ?? token.Start, segmentStart, segmentEnd);
-                words.Add(new TokenWord(trimmed.Length, start, End: null));
+                words.Add(new TokenWord(trimmed.Length, previousTokenEnd ?? token.Start, End: null, FirstToken: index));
                 startNewWord = false;
             }
             else
@@ -141,7 +143,7 @@ public static class TokenWordMerger
             // O fim da palavra é o do último token com letras: a pontuação final costuma cobrir a pausa.
             if (token.AlignedEnd is { } alignedEnd && trimmed.Any(char.IsLetterOrDigit))
             {
-                words[^1] = words[^1] with { End = Clamp(alignedEnd, segmentStart, segmentEnd) };
+                words[^1] = words[^1] with { End = alignedEnd };
             }
 
             // Palavras não contêm espaço interno; se o token tiver, o que vem depois é outra palavra.
@@ -161,7 +163,7 @@ public static class TokenWordMerger
     /// interpolando o tempo pela posição relativa dos caracteres.
     /// </summary>
     private static TimeSpan[] InterpolateByCharacterPosition(
-        List<TokenWord> tokenWords, string[] textWords, TimeSpan segmentEnd)
+        List<TokenWord> tokenWords, string[] textWords, TimeSpan segmentStart, TimeSpan segmentEnd)
     {
         // Pontos (posição relativa do caractere, tempo) dos tokens, terminando em (1, fim do trecho).
         var totalTokenChars = Math.Max(1, tokenWords.Sum(w => w.Length));
@@ -169,7 +171,7 @@ public static class TokenWordMerger
         var offset = 0;
         foreach (var word in tokenWords)
         {
-            points.Add(((double)offset / totalTokenChars, word.Start));
+            points.Add(((double)offset / totalTokenChars, Clamp(word.Start, segmentStart, segmentEnd)));
             offset += word.Length;
         }
 
@@ -211,5 +213,6 @@ public static class TokenWordMerger
     private static TimeSpan Clamp(TimeSpan value, TimeSpan min, TimeSpan max) =>
         value < min ? min : value > max ? max : value;
 
-    private readonly record struct TokenWord(int Length, TimeSpan Start, TimeSpan? End);
+    /// <summary>Palavra montada dos tokens: tamanho em letras, tempos do alinhamento e índice do seu primeiro token.</summary>
+    internal readonly record struct TokenWord(int Length, TimeSpan Start, TimeSpan? End, int FirstToken);
 }
