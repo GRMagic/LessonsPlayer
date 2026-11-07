@@ -162,7 +162,7 @@ public sealed partial class TranscriptionViewModel : ObservableObject
 
         // Criado na UI: os relatos voltam para ela. O rastreador guarda na hora onde a transcrição rodou, para a
         // mensagem final não depender de quando os relatos postados chegam.
-        var progress = new DeviceTrackingProgress(new Progress<TranscriptionProgress>(OnProgress));
+        var progress = new DeviceTrackingProgress(OnProgress);
         var stopwatch = Stopwatch.StartNew();
         RunningAudioFilePath = audioPath; // antes de IsRunning: quem observa IsRunning já encontra o caminho
         IsRunning = true;
@@ -171,8 +171,18 @@ public sealed partial class TranscriptionViewModel : ObservableObject
         {
             // Sempre a GPU, se houver; o transcritor cai para a CPU se ela falhar, e o progresso diz onde ficou.
             var options = new TranscriptionOptions(SelectedModel.Model, SelectedLanguage.Code, await _gpu);
-            var transcript = await Task.Run(
-                () => _generator.GenerateAsync(audioPath, options, progress, cancellationToken), cancellationToken);
+            Transcript transcript;
+            try
+            {
+                transcript = await Task.Run(
+                    () => _generator.GenerateAsync(audioPath, options, progress, cancellationToken), cancellationToken);
+            }
+            finally
+            {
+                // Relatos já postados que ainda não chegaram não podem mais sobrescrever a mensagem final.
+                progress.Close();
+            }
+
             SelectedModel.IsDownloaded = true;
             if (transcript.WordCount == 0)
             {
@@ -239,12 +249,42 @@ public sealed partial class TranscriptionViewModel : ObservableObject
         await running; // GenerateAsync trata o cancelamento e as falhas; não lança
     }
 
-    /// <summary>Repassa o progresso e guarda, no momento do relato, a GPU da transcrição (<c>null</c> = CPU).</summary>
-    private sealed class DeviceTrackingProgress(IProgress<TranscriptionProgress> inner) : IProgress<TranscriptionProgress>
+    /// <summary>
+    /// Repassa o progresso à UI e guarda, no momento do relato, a GPU da transcrição (<c>null</c> = CPU).
+    /// <see cref="Progress{T}"/> entrega os relatos de forma assíncrona (na thread da UI, no app; no ThreadPool, sem
+    /// contexto de sincronização), então um relato atrasado poderia chegar depois da mensagem final e sobrescrevê-la:
+    /// <see cref="Close"/> descarta os que chegarem depois dele.
+    /// </summary>
+    private sealed class DeviceTrackingProgress : IProgress<TranscriptionProgress>
     {
+        private readonly Lock _gate = new();
+        private readonly IProgress<TranscriptionProgress> _inner;
         private GpuDevice? _gpu;
+        private bool _closed;
+
+        public DeviceTrackingProgress(Action<TranscriptionProgress> onProgress) =>
+            _inner = new Progress<TranscriptionProgress>(value =>
+            {
+                // O lock espera um relato em andamento terminar de escrever antes de Close retornar.
+                lock (_gate)
+                {
+                    if (!_closed)
+                    {
+                        onProgress(value);
+                    }
+                }
+            });
 
         public GpuDevice? Gpu => Volatile.Read(ref _gpu);
+
+        /// <summary>Daqui em diante os relatos são ignorados.</summary>
+        public void Close()
+        {
+            lock (_gate)
+            {
+                _closed = true;
+            }
+        }
 
         public void Report(TranscriptionProgress value)
         {
@@ -253,7 +293,7 @@ public sealed partial class TranscriptionViewModel : ObservableObject
                 Volatile.Write(ref _gpu, value.Gpu);
             }
 
-            inner.Report(value);
+            _inner.Report(value);
         }
     }
 
