@@ -85,7 +85,7 @@ O zip pronto fica em [Releases](https://github.com/GRMagic/LessonsPlayer/release
 ./scripts/publish.ps1          # gera artifacts/publish/LessonsPlayer-win-x64 (+ .zip)
 ```
 
-A pasta é **self-contained**: roda em Windows 10/11 x64 sem .NET, Python ou CUDA instalados. Basta descompactar e abrir `LessonsPlayer.exe`. Dos ~100 MB do zip, cerca de metade é o runtime Vulkan, que habilita a GPU. O detector de voz (Silero VAD, 0,9 MB, licença MIT) vai junto, na pasta `vad`. Nas edições "N" do Windows é preciso o *Media Feature Pack*, por causa da decodificação de áudio.
+A publicação é um **único `LessonsPlayer.exe`** (214 MB; o zip tem ~85 MB), self-contained: roda em Windows 10/11 x64 sem .NET, Python ou CUDA instalados. Basta descompactar e abrir. Cerca de metade do tamanho é o runtime Vulkan, que habilita a GPU. O detector de voz (Silero VAD, 0,9 MB, licença MIT) também vai dentro do `.exe`. Na primeira execução o .NET extrai o conteúdo para `%TEMP%\.net\LessonsPlayer` (~200 MB, 4 a 5 s); as seguintes abrem em ~1 s, como a versão em várias pastas, porque só reaproveitam essa pasta. Cada versão nova extrai a sua própria pasta; as antigas podem ser apagadas à mão. É de lá que o Whisper.net carrega as bibliotecas nativas (a GPU Vulkan é detectada normalmente). Nas edições "N" do Windows é preciso o *Media Feature Pack*, por causa da decodificação de áudio.
 
 Dados do usuário:
 
