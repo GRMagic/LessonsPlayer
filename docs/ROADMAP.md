@@ -81,6 +81,11 @@ Nos casos em que as referências discordavam, o próprio áudio decidiu, com o R
 
 **Teste:** o `UnalignedTailTests` reproduz os padrões de tokens medidos (Khan, 11:52, 6:25, "about the mission."). Com TTS não deu para reproduzir: em 3 aulas de ~55 s com base, small, small.en e large-v3-turbo (13 janelas cortadas no meio da fala), o decodificador sempre fechou o trecho no limite de uma palavra.
 
+### Avançar para a próxima aula automaticamente (desligado por padrão)
+Feito em 2026-11-07. O botão de liga/desliga **Autoplay next** fica ao lado dos botões do player, no mesmo estilo do "Follow audio", com a dica "When a lesson ends, start the next one in the playlist". A escolha fica em `AppSettings.AutoAdvance`.
+- Desligado (o padrão), o player para no fim da aula, e a legenda dela continua na tela. O Play recomeça a aula do início.
+- Antes o avanço era sempre automático.
+
 ## A investigar
 
 ### Palavras presas aos limites de trechos de 1 s
@@ -109,10 +114,18 @@ Em 2026-11-06, numa comparação com os vídeos reais (small, StoryCorps), a ger
 - Antes: ver se um Whisper.net/ggml-vulkan mais novo já corrige isso, e testar com o driver atualizado.
 - Em 2026-11-07, mais duas travas em ~14 rodadas de testes com áudio real. Pelo log nativo, o Whisper.net usa o dispositivo Vulkan 0, que nesta máquina é a Intel Iris Xe, e não a GTX 1650. A pilha .NET mostrava a thread presa no código nativo do `WhisperProcessor`. As duas começaram com o Windows em espera moderna (Kernel-Power 506/507), às 6:47 e às 7:32. Mas várias outras rodadas na espera terminaram normalmente, então não dá para dizer que a espera é a causa.
 
-## Próximas
+### Queda ao carregar o modelo na GPU com o Windows em espera, na bateria
+Em 2026-11-07, às 10:04, a suíte de integração caiu com 0xC0000005 no `WhisperFactory.FromPath`, carregando o modelo na GTX 1650. Era a primeira queda em 4 rodadas completas na NVIDIA.
+- **Linha do tempo do log do sistema:** mudança de fonte de energia às 10:02:21 (o notebook passou para a bateria) e entrada em espera às 10:02:23 (Kernel-Power 105 e 506).
+- **Na tomada,** com o Windows em espera das 8:46 às 9:52, duas rodadas completas na NVIDIA passaram.
+- **Hipótese:** na bateria, em espera, a placa dedicada é desligada (Optimus), e o driver Vulkan falha ao alocar o modelo nela. As travas que o agente viu na Intel também começaram com o Windows em espera.
+- **No programa:** se o Windows entrar em espera no meio de uma geração (tela apagada por inatividade, tampa fechada), a GPU pode sumir. O programa cai (falha nativa, que o .NET não captura) ou trava (ver "Geração travada esperando a GPU").
+- **Opções:**
+  - pedir ao Windows para não dormir enquanto gera (`SetThreadExecutionState` com `ES_SYSTEM_REQUIRED` e `ES_DISPLAY_REQUIRED`). Na reprodução, `ES_DISPLAY_REQUIRED` também faz sentido: a turma acompanha a legenda na tela;
+  - o Whisper num processo filho, que pode cair ou ser encerrado sem levar o programa junto.
+- **A verificar:** repetir a queda de propósito (na bateria, forçar a espera durante uma geração), e ver se ela some na tomada ou com o pedido para não dormir.
 
-### Avançar para a próxima aula automaticamente (desligado por padrão)
-Uma opção, por exemplo uma caixa "Tocar a próxima ao terminar" perto do player, persistida em `AppSettings`. Desligada, o player só para no fim. Hoje o avanço é sempre automático (`MainViewModel` → `PlaybackCompleted`).
+## Próximas
 
 ### Busca de aulas
 Uma caixa de busca acima da playlist que filtra pelo nome da aula (sem acento e sem maiúsculas: "licao" acha "Lição").

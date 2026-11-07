@@ -68,6 +68,34 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public async Task When_a_lesson_ends_the_player_stops_there_by_default()
+    {
+        await _vm.OpenPathsAsync([@"C:\aulas"]);
+        _vm.Player.PlayPauseCommand.Execute(null);
+
+        _player.SimulateCompleted();
+
+        _player.CurrentFile.ShouldBe(Aula1);
+        _player.State.ShouldBe(PlaybackState.Stopped);
+        _vm.Playlist.CurrentItem!.FilePath.ShouldBe(Aula1);
+        _vm.Transcript.HasTranscript.ShouldBeTrue("a legenda da aula que terminou continua na tela");
+    }
+
+    [Fact]
+    public async Task With_autoplay_the_next_lesson_starts_when_one_ends()
+    {
+        await _vm.OpenPathsAsync([@"C:\aulas"]);
+        _vm.Player.AutoAdvance = true;
+        _vm.Player.PlayPauseCommand.Execute(null);
+
+        _player.SimulateCompleted();
+
+        _player.CurrentFile.ShouldBe(Aula2);
+        _player.State.ShouldBe(PlaybackState.Playing);
+        _vm.Playlist.CurrentItem!.FilePath.ShouldBe(Aula2);
+    }
+
+    [Fact]
     public async Task Track_navigation_is_disabled_without_a_playlist()
     {
         _vm.NextTrackCommand.CanExecute(null).ShouldBeFalse();
@@ -153,17 +181,6 @@ public sealed class MainViewModelTests
         _player.CurrentFile.ShouldBe(Aula2);
         _player.State.ShouldBe(PlaybackState.Playing);
         _vm.Transcript.HasTranscript.ShouldBeFalse();
-    }
-
-    [Fact]
-    public async Task End_of_track_plays_the_next_one()
-    {
-        await _vm.OpenPathsAsync([@"C:\aulas"]);
-
-        _player.SimulateCompleted();
-
-        _player.CurrentFile.ShouldBe(Aula2);
-        _player.State.ShouldBe(PlaybackState.Playing);
     }
 
     [Fact]

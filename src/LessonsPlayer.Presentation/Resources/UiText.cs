@@ -36,6 +36,8 @@ public static class UiText
     public const string NextHint = "Next track (Ctrl+→)";
     public const string VolumeHint = "Volume";
     public const string PositionHint = "Position";
+    public const string AutoAdvance = "Autoplay next";
+    public const string AutoAdvanceHint = "When a lesson ends, start the next one in the playlist";
 
     // --- Playlist / legenda ---
     public const string PlaylistEmpty = "Open a folder or an audio file\n(or drag it here).";

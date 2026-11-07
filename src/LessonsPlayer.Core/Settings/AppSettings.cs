@@ -13,5 +13,8 @@ public sealed record AppSettings
 
     public float Volume { get; init; } = 0.8f;
 
+    /// <summary>Tocar a próxima aula quando uma termina. Desligado: o player para no fim.</summary>
+    public bool AutoAdvance { get; init; }
+
     public string? LastFolder { get; init; }
 }
