@@ -147,6 +147,36 @@ public sealed partial class TranscriptViewModel(
     [RelayCommand]
     private void SelectWord(WordViewModel? word) => Select(CommitPendingEdit(word));
 
+    /// <summary>
+    /// Clique no horário à esquerda do trecho: vai para a primeira palavra dele, como o clique nela. Confirma
+    /// antes a edição inline em andamento, mesmo que seja dessa primeira palavra. Por isso a palavra é
+    /// reencontrada depois: a confirmação recria o trecho editado, e a palavra pode ter mudado ou sumido.
+    /// Corrigir uma palavra mantém o início dela, então a busca é pelo tempo.
+    /// </summary>
+    [RelayCommand]
+    private void SeekToSegment(SegmentViewModel? segment)
+    {
+        if (segment is null)
+        {
+            return;
+        }
+
+        var start = segment.Model.Start;
+        if (SelectedWord is { IsEditing: true } editing)
+        {
+            CommitEditWord(editing);
+        }
+
+        var target = Segments.SelectMany(s => s.Words).FirstOrDefault(w => w.Model.Start >= start);
+        if (target is null)
+        {
+            return;
+        }
+
+        Select(target);
+        SeekRequested?.Invoke(this, target.Model.Start);
+    }
+
     // ----- Corrigir palavra (edição inline) -----
 
     [RelayCommand]

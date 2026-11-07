@@ -149,7 +149,7 @@
         <TextBlock Grid.Column="1" Width="60" TextAlignment="Right" VerticalAlignment="Center"
                    Text="{Binding PositionText}" />
         <Slider Grid.Column="2" Margin="12,0" AutomationProperties.Name="{x:Static res:UiText.PositionHint}" VerticalAlignment="Center" Focusable="False"
-                Minimum="0" Maximum="{Binding DurationSeconds}"
+                Minimum="0" Maximum="{Binding SliderMaximum}"
                 Value="{Binding PositionSeconds, Mode=TwoWay}"
                 IsMoveToPointEnabled="True" IsEnabled="{Binding HasMedia}"
                 behaviors:SliderScrub.IsScrubbing="{Binding IsScrubbing, Mode=TwoWay}" />
