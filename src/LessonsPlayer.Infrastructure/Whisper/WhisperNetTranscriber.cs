@@ -128,13 +128,30 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
     private readonly ILogger<WhisperNetTranscriber> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly CancellationTokenSource _disposing = new();
-    private (string ModelPath, bool UseGpu, WhisperFactory Factory)? _cached;
+    private LoadedModel? _cached;
     private int _disposed;
 
     public WhisperNetTranscriber(ILogger<WhisperNetTranscriber> logger)
     {
         _logger = logger;
         WhisperRuntime.EnsureConfigured();
+    }
+
+    public async Task<GpuDevice?> LoadModelAsync(TranscriberSettings settings, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposing.Token);
+        await _gate.WaitAsync(linked.Token);
+        try
+        {
+            return GetOrCreateFactory(settings).UsedGpu;
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     public async IAsyncEnumerable<RecognizedSegment> TranscribeAsync(
@@ -153,7 +170,7 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            var factory = GetOrCreateFactory(settings);
+            var factory = GetOrCreateFactory(settings).Factory;
             var language = string.IsNullOrWhiteSpace(settings.Language) ? TranscriptionLanguages.Auto : settings.Language;
             var context = string.Empty;
             var offset = TimeSpan.Zero;
@@ -283,37 +300,49 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
         _disposing.Dispose();
     }
 
-    private WhisperFactory GetOrCreateFactory(TranscriberSettings settings)
+    /// <summary>O modelo carregado, a GPU pedida (chave do cache) e a usada de fato (<c>null</c> = CPU).</summary>
+    private sealed record LoadedModel(string ModelPath, GpuDevice? RequestedGpu, GpuDevice? UsedGpu, WhisperFactory Factory);
+
+    private LoadedModel GetOrCreateFactory(TranscriberSettings settings)
     {
-        if (_cached is { } cached && cached.ModelPath == settings.ModelPath && cached.UseGpu == settings.UseGpu)
+        if (_cached is { } cached && cached.ModelPath == settings.ModelPath && cached.RequestedGpu == settings.Gpu)
         {
-            return cached.Factory;
+            return cached;
         }
 
         _cached?.Factory.Dispose();
         _cached = null;
 
         WhisperFactory factory;
+        var usedGpu = settings.Gpu;
         try
         {
-            factory = CreateFactory(settings, settings.UseGpu);
+            factory = CreateFactory(settings, settings.Gpu);
         }
-        catch (Exception ex) when (settings.UseGpu)
+        catch (Exception ex) when (settings.Gpu is not null)
         {
             // Driver de GPU problemático: tenta de novo só com CPU.
             LogGpuFallback(_logger, ex);
-            factory = CreateFactory(settings, useGpu: false);
+            factory = CreateFactory(settings, gpu: null);
+            usedGpu = null;
         }
 
-        LogFactoryCreated(_logger, settings.ModelPath, RuntimeOptions.LoadedLibrary, settings.UseGpu);
-        _cached = (settings.ModelPath, settings.UseGpu, factory);
-        return factory;
+        if (RuntimeOptions.LoadedLibrary != RuntimeLibrary.Vulkan)
+        {
+            usedGpu = null; // o runtime Vulkan não carregou: o Whisper.net está no runtime de CPU
+        }
+
+        LogFactoryCreated(_logger, settings.ModelPath, RuntimeOptions.LoadedLibrary, usedGpu?.Name ?? "CPU");
+        _cached = new LoadedModel(settings.ModelPath, settings.Gpu, usedGpu, factory);
+        return _cached;
     }
 
-    private static WhisperFactory CreateFactory(TranscriberSettings settings, bool useGpu) =>
+    private static WhisperFactory CreateFactory(TranscriberSettings settings, GpuDevice? gpu) =>
         WhisperFactory.FromPath(settings.ModelPath, new WhisperFactoryOptions
         {
-            UseGpu = useGpu,
+            // Sem GpuDevice, o Whisper usa o dispositivo 0, que pode ser a GPU integrada (ver VulkanGpuDetector).
+            UseGpu = gpu is not null,
+            GpuDevice = gpu?.Index ?? 0,
             UseDtwTimeStamps = true,
             HeadsPreset = ToHeadsPreset(settings.ModelSize, settings.EnglishOnly),
             UseFlashAttention = false, // o DTW exige flash attention desligado
@@ -486,8 +515,8 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
     [LoggerMessage(Level = LogLevel.Information, Message = "Transcrevendo {Duration} com modelo {ModelSize}, idioma {Language}")]
     private static partial void LogStarted(ILogger logger, TimeSpan duration, WhisperModelSize modelSize, string language);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Modelo carregado: {ModelPath} (runtime {Runtime}, GPU solicitada: {UseGpu})")]
-    private static partial void LogFactoryCreated(ILogger logger, string modelPath, RuntimeLibrary? runtime, bool useGpu);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Modelo carregado: {ModelPath} (runtime {Runtime}, em {Device})")]
+    private static partial void LogFactoryCreated(ILogger logger, string modelPath, RuntimeLibrary? runtime, string device);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "A transcrição não parou em {Timeout}; o modelo não será liberado")]
     private static partial void LogDisposeTimedOut(ILogger logger, TimeSpan timeout);

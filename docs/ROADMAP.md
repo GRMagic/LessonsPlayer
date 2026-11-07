@@ -48,6 +48,14 @@ Feito em 2026-11-07. O horário à esquerda de cada trecho virou um botão discr
 - Verificado na tela: com uma palavra em edição no primeiro trecho, o clique em "0:10" confirmou a edição e levou o áudio a 10,98 s, o início exato do trecho.
 - **De quebra:** sem faixa aberta (por exemplo, depois de falhar ao abrir um arquivo), o marcador da barra de posição aparecia no fim. O WPF faz isso quando mínimo e máximo são iguais (0 e 0). Agora o máximo da barra nunca é 0.
 
+### GPU sempre que houver, sem a opção "Use GPU"
+Feito em 2026-11-07. O item pedia para desabilitar a opção quando não houvesse GPU. O usuário preferiu tirar a caixa: o programa usa a GPU sempre que houver, cai para a CPU quando não há, e a barra de status diz onde a legenda está sendo gerada.
+- **Exemplos de mensagem:** "Transcribing on the GPU (NVIDIA GeForce GTX 1650)… 45%" e "Subtitles for … generated on the CPU in 1:05".
+- **Detecção (`VulkanGpuDetector`):** lista os dispositivos com o `vulkan-1.dll` e segue as regras do ggml-vulkan (Vulkan 1.2; nada do tipo CPU, como os rasterizadores em software). Leva ~1,3 s e começa em segundo plano ao abrir o programa.
+- **Placa dedicada:** o Whisper.net usava o dispositivo 0, que nesta máquina é a Intel Iris Xe. Com o small, em 90 s de aula real, a GTX 1650 levou 4,7 s e a Intel 10,0 s, com o mesmo texto. Agora a detecção escolhe a dedicada, e o transcritor passa o índice dela (`GpuDevice`).
+- **Falha:** se a GPU falhar ao carregar o modelo, ou se o runtime Vulkan não carregar, o transcritor usa a CPU e informa isso (`ITranscriber.LoadModelAsync`), e a mensagem diz CPU.
+- A preferência `UseGpu` saiu do `settings.json`; o valor antigo que estiver no arquivo é ignorado.
+
 ### Palavras sem alinhamento no fim de uma janela cortada no meio da fala
 Na NASA (small), em duas janelas, as palavras finais ficaram todas no mesmo instante, com duração zero:
 - em 6:25, "United States Senate and the United States Senate have been in the process of making the": texto inventado, por cima da fala real ("from the Massachusetts school issued an apology...");
@@ -92,7 +100,8 @@ Na medição feita durante o desenvolvimento do detector de voz (2026-11-06, 9:4
 - Com a correção das palavras sem alinhamento, o large deu 2,4% no Khan e 4,0% no StoryCorps. No Khan, 13 dos 14 erros a menos eram uma continuação inventada no fim de uma janela ("...that it's a little bit more than a plane.") e a repetição na fatia seguinte ("That's a specific way that").
 
 ### Geração travada esperando a GPU
-Em 2026-11-06, numa comparação com os vídeos reais (small, StoryCorps), a geração ficou parada por 10 h até ser encerrada à mão. A thread do Whisper estava no `ggml_vk_wait_for_fence` do backend Vulkan, que fica consultando `vkGetFenceStatus` até a GPU terminar. A GPU nunca terminou: a resposta foi `VK_NOT_READY` o tempo todo, com 100% de um núcleo ocupado. O log do Windows não tem reset do driver de vídeo nesse horário. A máquina tem GTX 1650 (driver 31.0.15.3758, de 2023) e Iris Xe. Foi a primeira vez em dezenas de gerações.
+Em 2026-11-06, numa comparação com os vídeos reais (small, StoryCorps), a geração ficou parada por 10 h até ser encerrada à mão. A thread do Whisper estava no `ggml_vk_wait_for_fence` do backend Vulkan, que fica consultando `vkGetFenceStatus` até a GPU terminar. A GPU nunca terminou: a resposta foi `VK_NOT_READY` o tempo todo, com 100% de um núcleo ocupado. O log do Windows não tem reset do driver de vídeo nesse horário. Foi a primeira vez em dezenas de gerações.
+- **Qual GPU:** até 2026-11-07 o Whisper usava sempre o dispositivo Vulkan 0, que nesta máquina é a Intel Iris Xe (driver 31.0.101.4502, de 2023), e não a GTX 1650. O travamento foi, então, quase certamente na Intel. Agora o programa usa a placa dedicada (ver "GPU sempre que houver" em Resolvidos), e vale observar se o problema volta.
 - No programa, o progresso pararia e o Cancelar não adiantaria: esse laço nativo não verifica cancelamento.
 - Opções:
   - um vigia por janela: se uma janela de 30 s passar de um limite, ela é abandonada e refeita na CPU. A thread presa continua girando até o programa fechar;
@@ -101,14 +110,6 @@ Em 2026-11-06, numa comparação com os vídeos reais (small, StoryCorps), a ger
 - Em 2026-11-07, mais duas travas em ~14 rodadas de testes com áudio real. Pelo log nativo, o Whisper.net usa o dispositivo Vulkan 0, que nesta máquina é a Intel Iris Xe, e não a GTX 1650. A pilha .NET mostrava a thread presa no código nativo do `WhisperProcessor`. As duas começaram com o Windows em espera moderna (Kernel-Power 506/507), às 6:47 e às 7:32. Mas várias outras rodadas na espera terminaram normalmente, então não dá para dizer que a espera é a causa.
 
 ## Próximas
-
-### "Usar GPU" só quando houver GPU
-Desabilitar a opção, e tratá-la como desmarcada, quando não houver GPU utilizável.
-- A detecção precisa refletir o que o Whisper.net consegue usar: um dispositivo Vulkan (inclui GPU integrada Intel/AMD). Opções:
-  - enumerar dispositivos com o `vulkan-1.dll` (`vkEnumeratePhysicalDevices`);
-  - DXGI, excluindo o "Microsoft Basic Render Driver";
-  - carregar o runtime Vulkan e ver se o Whisper.net caiu para CPU (`RuntimeOptions.LoadedLibrary`).
-- Mostrar o nome da GPU na dica ("Usa a GPU Intel Iris Xe…").
 
 ### Avançar para a próxima aula automaticamente (desligado por padrão)
 Uma opção, por exemplo uma caixa "Tocar a próxima ao terminar" perto do player, persistida em `AppSettings`. Desligada, o player só para no fim. Hoje o avanço é sempre automático (`MainViewModel` → `PlaybackCompleted`).

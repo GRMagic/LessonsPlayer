@@ -23,6 +23,7 @@ public static class DependencyInjection
         services.AddSingleton<IAudioDecoder, AudioFileDecoder>();
         services.AddSingleton<ISpeechDetector, SileroSpeechDetector>();
         services.AddSingleton<ITranscriber, WhisperNetTranscriber>();
+        services.AddSingleton<IGpuDetector, VulkanGpuDetector>();
         services.AddSingleton<ISubtitleStore, TxtSubtitleStore>();
         services.AddSingleton<ISettingsStore, JsonSettingsStore>();
         services.AddSingleton<IPlaylistSource, FileSystemPlaylistSource>();

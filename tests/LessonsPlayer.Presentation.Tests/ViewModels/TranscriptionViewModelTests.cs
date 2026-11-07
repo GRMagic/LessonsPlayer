@@ -16,27 +16,71 @@ public sealed class TranscriptionViewModelTests
 {
     private const string AudioPath = @"C:\aulas\aula1.mp3";
 
+    private static readonly GpuDevice Gpu = new("NVIDIA GeForce GTX 1650", 1);
+
     private readonly InMemorySubtitleStore _subtitles = new();
     private readonly IDialogService _dialogs = Substitute.For<IDialogService>();
     private readonly BlockingTranscriber _transcriber = new();
     private readonly InMemorySettingsStore _settingsStore = new();
+    private readonly IModelStore _models = Substitute.For<IModelStore>();
+    private readonly IAudioDecoder _decoder = Substitute.For<IAudioDecoder>();
     private readonly TranscriptionViewModel _vm;
 
     public TranscriptionViewModelTests()
     {
-        var models = Substitute.For<IModelStore>();
-        models.EnsureDownloadedAsync(default!, default, default).ReturnsForAnyArgs("model.bin");
-        var decoder = Substitute.For<IAudioDecoder>();
-        decoder.DecodeForSpeechAsync(default!, default)
+        _models.EnsureDownloadedAsync(default!, default, default).ReturnsForAnyArgs("model.bin");
+        _decoder.DecodeForSpeechAsync(default!, default)
             .ReturnsForAnyArgs(new AudioSamples(new float[AudioSamples.SpeechSampleRate * 2], AudioSamples.SpeechSampleRate));
+        _vm = CreateViewModel(Gpu);
+    }
 
-        _vm = new TranscriptionViewModel(
-            new SubtitleGenerator(models, decoder, Substitute.For<ISpeechDetector>(), _transcriber, TimeProvider.System),
-            _subtitles, models, _dialogs, new AppSettingsService(_settingsStore),
+    private TranscriptionViewModel CreateViewModel(GpuDevice? detectedGpu)
+    {
+        var detector = Substitute.For<IGpuDetector>();
+        detector.FindGpuAsync(default).ReturnsForAnyArgs(detectedGpu);
+        return new TranscriptionViewModel(
+            new SubtitleGenerator(_models, _decoder, Substitute.For<ISpeechDetector>(), _transcriber, TimeProvider.System),
+            _subtitles, _models, detector, _dialogs, new AppSettingsService(_settingsStore),
             NullLogger<TranscriptionViewModel>.Instance)
         {
             TargetAudioFilePath = AudioPath,
         };
+    }
+
+    [Fact]
+    public async Task Generates_on_the_detected_gpu_and_says_so_when_done()
+    {
+        _transcriber.Release();
+
+        await _vm.GenerateCommand.ExecuteAsync(null);
+
+        _transcriber.Settings!.Gpu.ShouldBe(Gpu);
+        _vm.StatusText.ShouldNotBeNull().ShouldContain("generated on the GPU (NVIDIA GeForce GTX 1650)");
+    }
+
+    [Fact]
+    public async Task Without_a_gpu_generates_on_the_cpu_and_says_so()
+    {
+        var vm = CreateViewModel(detectedGpu: null);
+        _transcriber.Release();
+
+        await vm.GenerateCommand.ExecuteAsync(null);
+
+        _transcriber.Settings!.Gpu.ShouldBeNull();
+        vm.StatusText.ShouldNotBeNull().ShouldContain("generated on the CPU");
+    }
+
+    /// <summary>A GPU existe mas falhou ao carregar o modelo: o transcritor usou a CPU, e a mensagem diz isso.</summary>
+    [Fact]
+    public async Task When_the_gpu_fails_the_message_says_cpu()
+    {
+        _transcriber.LoadedOn = _ => null;
+        _transcriber.Release();
+
+        await _vm.GenerateCommand.ExecuteAsync(null);
+
+        _transcriber.Settings!.Gpu.ShouldBe(Gpu);
+        _vm.StatusText.ShouldNotBeNull().ShouldContain("generated on the CPU");
     }
 
     [Fact]
@@ -165,11 +209,9 @@ public sealed class TranscriptionViewModelTests
     {
         _vm.SelectedModel = _vm.Models.Single(m => m.Model == WhisperModels.Base);
         _vm.SelectedLanguage = _vm.Languages.Single(l => l.Code == "en");
-        _vm.UseGpu = false;
 
         _settingsStore.Stored.ModelId.ShouldBe("base-q5_1");
         _settingsStore.Stored.Language.ShouldBe("en");
-        _settingsStore.Stored.UseGpu.ShouldBeFalse();
     }
 
     /// <summary>Transcritor que espera o teste liberar, para observar o estado "em andamento".</summary>
@@ -183,6 +225,17 @@ public sealed class TranscriptionViewModelTests
         public string Text { get; set; } = " Pronto";
 
         public void Release() => _release.TrySetResult();
+
+        /// <summary>Onde o modelo "ficou": por padrão, onde foi pedido.</summary>
+        public Func<TranscriberSettings, GpuDevice?> LoadedOn { get; set; } = settings => settings.Gpu;
+
+        public TranscriberSettings? Settings { get; private set; }
+
+        public Task<GpuDevice?> LoadModelAsync(TranscriberSettings settings, CancellationToken cancellationToken)
+        {
+            Settings = settings;
+            return Task.FromResult(LoadedOn(settings));
+        }
 
         public async IAsyncEnumerable<RecognizedSegment> TranscribeAsync(
             AudioSamples audio, TranscriberSettings settings, [EnumeratorCancellation] CancellationToken cancellationToken)

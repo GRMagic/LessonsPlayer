@@ -13,10 +13,16 @@ public enum TranscriptionStage
 }
 
 /// <summary>Progresso da geração: etapa atual e fração concluída dela (0 a 1).</summary>
-public readonly record struct TranscriptionProgress(TranscriptionStage Stage, double Fraction);
+/// <param name="Stage">A etapa atual.</param>
+/// <param name="Fraction">Quanto dela já foi feito, de 0 a 1.</param>
+/// <param name="Gpu">Na transcrição, a GPU em uso; <c>null</c> é a CPU.</param>
+public readonly record struct TranscriptionProgress(TranscriptionStage Stage, double Fraction, GpuDevice? Gpu = null);
 
-/// <summary>Opções escolhidas pelo usuário para gerar a legenda.</summary>
-public sealed record TranscriptionOptions(WhisperModel Model, string Language, bool UseGpu);
+/// <summary>Opções para gerar a legenda: o modelo e o idioma escolhidos pelo usuário, e a GPU detectada.</summary>
+/// <param name="Model">O modelo do Whisper.</param>
+/// <param name="Language">Código do idioma ou <c>auto</c>.</param>
+/// <param name="Gpu">A GPU a usar, ou <c>null</c> para a CPU.</param>
+public sealed record TranscriptionOptions(WhisperModel Model, string Language, GpuDevice? Gpu);
 
 /// <summary>
 /// Caso de uso "gerar legenda": garante o modelo, decodifica o áudio, detecta onde há fala, transcreve e monta
@@ -51,11 +57,13 @@ public sealed class SubtitleGenerator(
         var audio = await audioDecoder.DecodeForSpeechAsync(audioFilePath, cancellationToken);
         var speech = await DetectSpeechAsync(audio, cancellationToken); // rápido: ~2 s por 10 min de áudio na CPU
 
-        progress?.Report(new TranscriptionProgress(TranscriptionStage.Transcribing, 0));
         // Modelos .en só transcrevem inglês: detectar idioma ou pedir outro não faz sentido.
         var requestedLanguage = options.Model.EnglishOnly ? EnglishLanguage : options.Language;
         var settings = new TranscriberSettings(
-            modelPath, options.Model.Size, requestedLanguage, options.UseGpu, options.Model.EnglishOnly, speech);
+            modelPath, options.Model.Size, requestedLanguage, options.Gpu, options.Model.EnglishOnly, speech);
+        // Onde o modelo ficou de fato: se a GPU falhar, o motor usa a CPU, e o progresso mostra isso.
+        var gpu = await transcriber.LoadModelAsync(settings, cancellationToken);
+        progress?.Report(new TranscriptionProgress(TranscriptionStage.Transcribing, 0, gpu));
         var segments = new List<Segment>();
         string? detectedLanguage = null;
 
@@ -68,10 +76,10 @@ public sealed class SubtitleGenerator(
             }
 
             detectedLanguage ??= recognized.Language;
-            progress?.Report(new TranscriptionProgress(TranscriptionStage.Transcribing, Fraction(recognized.End, audio)));
+            progress?.Report(new TranscriptionProgress(TranscriptionStage.Transcribing, Fraction(recognized.End, audio), gpu));
         }
 
-        progress?.Report(new TranscriptionProgress(TranscriptionStage.Transcribing, 1));
+        progress?.Report(new TranscriptionProgress(TranscriptionStage.Transcribing, 1, gpu));
 
         var language = requestedLanguage == TranscriptionLanguages.Auto ? detectedLanguage : requestedLanguage;
         var metadata = new TranscriptMetadata(

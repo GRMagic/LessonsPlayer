@@ -57,15 +57,15 @@ public sealed partial class TranscriptionViewModel : ObservableObject
     private readonly AppSettingsService _settings;
     private readonly ILogger<TranscriptionViewModel> _logger;
 
+    /// <summary>A GPU detectada ao abrir o programa, ou <c>null</c> se não houver (a transcrição usa a CPU).</summary>
+    private readonly Task<GpuDevice?> _gpu;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanChooseLanguage))]
     private ModelOption _selectedModel;
 
     [ObservableProperty]
     private LanguageOption _selectedLanguage;
-
-    [ObservableProperty]
-    private bool _useGpu;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(GenerateCommand))]
@@ -95,10 +95,14 @@ public sealed partial class TranscriptionViewModel : ObservableObject
         SubtitleGenerator generator,
         ISubtitleStore subtitleStore,
         IModelStore modelStore,
+        IGpuDetector gpuDetector,
         IDialogService dialogs,
         AppSettingsService settings,
         ILogger<TranscriptionViewModel> logger)
     {
+        // Começa já, em segundo plano (~1 s carregando os drivers Vulkan): quando o usuário pedir a primeira
+        // legenda, a resposta quase sempre já chegou.
+        _gpu = gpuDetector.FindGpuAsync(CancellationToken.None);
         _generator = generator;
         _subtitleStore = subtitleStore;
         _modelStore = modelStore;
@@ -113,7 +117,6 @@ public sealed partial class TranscriptionViewModel : ObservableObject
         var savedModel = WhisperModels.FindOrDefault(current.ModelId);
         _selectedModel = Models.First(o => o.Model == savedModel);
         _selectedLanguage = Languages.First(l => l.Code == TranscriptionLanguages.NormalizeOrAuto(current.Language));
-        _useGpu = current.UseGpu;
     }
 
     /// <summary>Uma legenda foi gerada e salva (na thread da UI).</summary>
@@ -150,14 +153,17 @@ public sealed partial class TranscriptionViewModel : ObservableObject
             return;
         }
 
-        var options = new TranscriptionOptions(SelectedModel.Model, SelectedLanguage.Code, UseGpu);
-        var progress = new Progress<TranscriptionProgress>(OnProgress); // criado na UI: os relatos voltam para ela
+        // Criado na UI: os relatos voltam para ela. O rastreador guarda na hora onde a transcrição rodou, para a
+        // mensagem final não depender de quando os relatos postados chegam.
+        var progress = new DeviceTrackingProgress(new Progress<TranscriptionProgress>(OnProgress));
         var stopwatch = Stopwatch.StartNew();
         RunningAudioFilePath = audioPath; // antes de IsRunning: quem observa IsRunning já encontra o caminho
         IsRunning = true;
 
         try
         {
+            // Sempre a GPU, se houver; o transcritor cai para a CPU se ela falhar, e o progresso diz onde ficou.
+            var options = new TranscriptionOptions(SelectedModel.Model, SelectedLanguage.Code, await _gpu);
             var transcript = await Task.Run(
                 () => _generator.GenerateAsync(audioPath, options, progress, cancellationToken), cancellationToken);
             SelectedModel.IsDownloaded = true;
@@ -169,7 +175,7 @@ public sealed partial class TranscriptionViewModel : ObservableObject
             }
 
             var isSaved = await TrySaveAsync(audioPath, transcript, cancellationToken);
-            StatusText = UiText.TranscriptionFinished(fileName, stopwatch.Elapsed, transcript.WordCount);
+            StatusText = UiText.TranscriptionFinished(fileName, stopwatch.Elapsed, transcript.WordCount, progress.Gpu);
             Completed?.Invoke(this, new TranscriptionCompletedEventArgs(audioPath, transcript, isSaved));
         }
         catch (OperationCanceledException)
@@ -226,6 +232,24 @@ public sealed partial class TranscriptionViewModel : ObservableObject
         await running; // GenerateAsync trata o cancelamento e as falhas; não lança
     }
 
+    /// <summary>Repassa o progresso e guarda, no momento do relato, a GPU da transcrição (<c>null</c> = CPU).</summary>
+    private sealed class DeviceTrackingProgress(IProgress<TranscriptionProgress> inner) : IProgress<TranscriptionProgress>
+    {
+        private GpuDevice? _gpu;
+
+        public GpuDevice? Gpu => Volatile.Read(ref _gpu);
+
+        public void Report(TranscriptionProgress value)
+        {
+            if (value.Stage == TranscriptionStage.Transcribing)
+            {
+                Volatile.Write(ref _gpu, value.Gpu);
+            }
+
+            inner.Report(value);
+        }
+    }
+
     private void OnProgress(TranscriptionProgress value)
     {
         IsProgressIndeterminate = value.Stage == TranscriptionStage.DecodingAudio
@@ -255,9 +279,6 @@ public sealed partial class TranscriptionViewModel : ObservableObject
 
     partial void OnSelectedLanguageChanged(LanguageOption value) =>
         _settings.Update(s => s with { Language = value.Code }, saveNow: true);
-
-    partial void OnUseGpuChanged(bool value) =>
-        _settings.Update(s => s with { UseGpu = value }, saveNow: true);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Falha ao gerar legenda para {AudioFilePath}")]
     private static partial void LogFailed(ILogger logger, Exception exception, string audioFilePath);

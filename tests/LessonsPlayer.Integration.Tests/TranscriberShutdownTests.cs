@@ -50,7 +50,7 @@ public sealed class TranscriberShutdownTests : IDisposable
         var progressed = new TaskCompletionSource();
         var generation = Task.Run(() => generator.GenerateAsync(
             audio.FilePath,
-            new TranscriptionOptions(WhisperModels.FindOrDefault(modelId), "en", UseGpu: false),
+            new TranscriptionOptions(WhisperModels.FindOrDefault(modelId), "en", Gpu: null),
             new SynchronousProgress(p => { if (p.Stage == TranscriptionStage.Transcribing) progressed.TrySetResult(); }),
             cts.Token), ct);
 

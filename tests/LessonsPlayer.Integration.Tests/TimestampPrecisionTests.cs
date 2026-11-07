@@ -171,7 +171,7 @@ public sealed class TimestampPrecisionTests : IDisposable
         var generator = new SubtitleGenerator(models, new AudioFileDecoder(), TestSpeechDetector.Create(), transcriber, TimeProvider.System);
 
         return await generator.GenerateAsync(
-            audioPath, new TranscriptionOptions(model, language, UseGpu: true), progress: null, ct);
+            audioPath, new TranscriptionOptions(model, language, await TestGpu.FindAsync()), progress: null, ct);
     }
 
     private static double Percentile(double[] sorted, double p) =>

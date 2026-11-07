@@ -11,8 +11,6 @@ public sealed record AppSettings
 
     public string Language { get; init; } = TranscriptionLanguages.Auto;
 
-    public bool UseGpu { get; init; } = true;
-
     public float Volume { get; init; } = 0.8f;
 
     public string? LastFolder { get; init; }

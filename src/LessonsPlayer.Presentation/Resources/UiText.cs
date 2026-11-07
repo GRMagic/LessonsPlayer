@@ -26,8 +26,6 @@ public static class UiText
     public const string Cancel = "Cancel";
     public const string Model = "Model";
     public const string Language = "Language";
-    public const string UseGpu = "Use GPU";
-    public const string UseGpuHint = "Uses the graphics card when available (Vulkan); otherwise, the CPU.";
     public const string EnglishOnlyModelHint = "The .en models only transcribe English; the language setting doesn't apply.";
 
     // --- Player ---
@@ -161,11 +159,14 @@ public static class UiText
             string.Create(Culture, $"Downloading model… {progress.Fraction:P0}"),
         TranscriptionStage.DownloadingModel => "Loading model…",
         TranscriptionStage.DecodingAudio => "Reading the audio…",
-        _ => string.Create(Culture, $"Transcribing… {progress.Fraction:P0}"),
+        _ => string.Create(Culture, $"Transcribing on {Device(progress.Gpu)}… {progress.Fraction:P0}"),
     };
 
-    public static string TranscriptionFinished(string fileName, TimeSpan elapsed, int words) =>
-        string.Create(Culture, $"Subtitles for \"{fileName}\" generated in {elapsed:m\\:ss} ({words:N0} words).");
+    public static string TranscriptionFinished(string fileName, TimeSpan elapsed, int words, GpuDevice? gpu) =>
+        string.Create(Culture, $"Subtitles for \"{fileName}\" generated on {Device(gpu)} in {elapsed:m\\:ss} ({words:N0} words).");
+
+    /// <summary>Onde a transcrição roda: "the GPU (NVIDIA GeForce GTX 1650)" ou "the CPU".</summary>
+    private static string Device(GpuDevice? gpu) => gpu is null ? "the CPU" : $"the GPU ({gpu.Name})";
 
     public static string NoSpeechFound(string fileName) =>
         $"No speech was recognized in \"{fileName}\"; the subtitles weren't saved.";

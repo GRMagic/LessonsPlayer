@@ -12,6 +12,8 @@ public sealed class SubtitleGeneratorTests
     private readonly IAudioDecoder _decoder = Substitute.For<IAudioDecoder>();
     private readonly ISpeechDetector _speech = Substitute.For<ISpeechDetector>();
     private readonly ITranscriber _transcriber = Substitute.For<ITranscriber>();
+    private static readonly GpuDevice Gpu = new("NVIDIA GeForce GTX 1650", 1);
+
     private readonly SubtitleGenerator _generator;
 
     public SubtitleGeneratorTests()
@@ -32,7 +34,7 @@ public sealed class SubtitleGeneratorTests
 
         var transcript = await _generator.GenerateAsync(
             @"C:\aulas\aula01.mp3",
-            new TranscriptionOptions(WhisperModels.Small, TranscriptionLanguages.Auto, UseGpu: false),
+            new TranscriptionOptions(WhisperModels.Small, TranscriptionLanguages.Auto, Gpu: null),
             new CollectingProgress(reports),
             TestContext.Current.CancellationToken);
 
@@ -53,7 +55,7 @@ public sealed class SubtitleGeneratorTests
             new RecognizedSegment(Ms(3000), Ms(4000), " Muito bem.", [], "pt")));
 
         var transcript = await _generator.GenerateAsync(
-            "a.mp3", new TranscriptionOptions(WhisperModels.Small, "pt", UseGpu: false), null,
+            "a.mp3", new TranscriptionOptions(WhisperModels.Small, "pt", Gpu: null), null,
             TestContext.Current.CancellationToken);
 
         transcript.Segments.Select(s => s.Text).ShouldBe(
@@ -66,13 +68,47 @@ public sealed class SubtitleGeneratorTests
         _transcriber.TranscribeAsync(default!, default!, TestContext.Current.CancellationToken).ReturnsForAnyArgs(Segments());
 
         await _generator.GenerateAsync(
-            "a.mp3", new TranscriptionOptions(WhisperModels.Small, "en", UseGpu: true), null,
+            "a.mp3", new TranscriptionOptions(WhisperModels.Small, "en", Gpu: Gpu), null,
             TestContext.Current.CancellationToken);
 
         _transcriber.Received(1).TranscribeAsync(
             Arg.Any<AudioSamples>(),
-            new TranscriberSettings("C:/models/small.bin", WhisperModelSize.Small, "en", true),
+            new TranscriberSettings("C:/models/small.bin", WhisperModelSize.Small, "en", Gpu),
             TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Progress_says_the_transcription_runs_on_the_gpu_the_model_was_loaded_on()
+    {
+        _transcriber.LoadModelAsync(default!, TestContext.Current.CancellationToken).ReturnsForAnyArgs(Gpu);
+        _transcriber.TranscribeAsync(default!, default!, TestContext.Current.CancellationToken).ReturnsForAnyArgs(Segments(
+            new RecognizedSegment(Ms(0), Ms(1000), " Hello", [], "en")));
+        var reports = new List<TranscriptionProgress>();
+
+        await _generator.GenerateAsync(
+            "a.mp3", new TranscriptionOptions(WhisperModels.Small, "en", Gpu), new CollectingProgress(reports),
+            TestContext.Current.CancellationToken);
+
+        reports.Where(r => r.Stage == TranscriptionStage.Transcribing).ShouldAllBe(r => r.Gpu == Gpu);
+        await _transcriber.Received(1).LoadModelAsync(
+            Arg.Is<TranscriberSettings>(s => s.Gpu == Gpu), TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>A GPU falhou ao carregar o modelo e o motor caiu para a CPU: o progresso tem que dizer CPU.</summary>
+    [Fact]
+    public async Task Progress_says_cpu_when_the_gpu_was_requested_but_the_model_fell_back()
+    {
+        _transcriber.LoadModelAsync(default!, TestContext.Current.CancellationToken).ReturnsForAnyArgs((GpuDevice?)null);
+        _transcriber.TranscribeAsync(default!, default!, TestContext.Current.CancellationToken).ReturnsForAnyArgs(Segments(
+            new RecognizedSegment(Ms(0), Ms(1000), " Hello", [], "en")));
+        var reports = new List<TranscriptionProgress>();
+
+        await _generator.GenerateAsync(
+            "a.mp3", new TranscriptionOptions(WhisperModels.Small, "en", Gpu), new CollectingProgress(reports),
+            TestContext.Current.CancellationToken);
+
+        reports.Where(r => r.Stage == TranscriptionStage.Transcribing).ShouldAllBe(r => r.Gpu == null);
+        reports.ShouldContain(r => r.Stage == TranscriptionStage.Transcribing);
     }
 
     [Fact]
@@ -82,12 +118,12 @@ public sealed class SubtitleGeneratorTests
             new RecognizedSegment(Ms(0), Ms(1000), " Hello", [], "en")));
 
         var transcript = await _generator.GenerateAsync(
-            "a.mp3", new TranscriptionOptions(WhisperModels.SmallEnglish, TranscriptionLanguages.Auto, UseGpu: true), null,
+            "a.mp3", new TranscriptionOptions(WhisperModels.SmallEnglish, TranscriptionLanguages.Auto, Gpu: Gpu), null,
             TestContext.Current.CancellationToken);
 
         _transcriber.Received(1).TranscribeAsync(
             Arg.Any<AudioSamples>(),
-            new TranscriberSettings("C:/models/small.bin", WhisperModelSize.Small, "en", true, EnglishOnly: true),
+            new TranscriberSettings("C:/models/small.bin", WhisperModelSize.Small, "en", Gpu, EnglishOnly: true),
             TestContext.Current.CancellationToken);
         transcript.Metadata.Language.ShouldBe("en");
         transcript.Metadata.Model.ShouldBe("small.en-q5_1");
@@ -103,7 +139,7 @@ public sealed class SubtitleGeneratorTests
             new RecognizedSegment(Ms(3000), Ms(4000), " Thank you.", [], "en")));
 
         var transcript = await _generator.GenerateAsync(
-            "a.mp3", new TranscriptionOptions(WhisperModels.Small, "en", UseGpu: false), null,
+            "a.mp3", new TranscriptionOptions(WhisperModels.Small, "en", Gpu: null), null,
             TestContext.Current.CancellationToken);
 
         transcript.Segments.Select(s => s.Text).ShouldBe(["Hello there."]);
@@ -121,7 +157,7 @@ public sealed class SubtitleGeneratorTests
             new RecognizedSegment(Ms(0), Ms(1000), " Hello there.", [], "en")));
 
         var transcript = await _generator.GenerateAsync(
-            "a.mp3", new TranscriptionOptions(WhisperModels.Small, "en", UseGpu: false), null,
+            "a.mp3", new TranscriptionOptions(WhisperModels.Small, "en", Gpu: null), null,
             TestContext.Current.CancellationToken);
 
         transcript.Segments.Select(s => s.Text).ShouldBe(["Hello there."]);
