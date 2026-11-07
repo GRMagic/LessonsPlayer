@@ -155,6 +155,22 @@ public sealed class SubtitleTxtFormatTests
         result.CorrectedTimeCount.ShouldBe(1);
     }
 
+    /// <summary>
+    /// "#" abre comentário no formato; uma palavra editada para "#." (caso do usuário) não pode sumir ao salvar e
+    /// reabrir, nem como primeira palavra do trecho.
+    /// </summary>
+    [Fact]
+    public void Word_starting_with_hash_survives_save_and_reload()
+    {
+        var original = Tr(Seg(W(1000, 1400, "#."), W(1400, 2000, "shop")), Seg(W(3000, 3500, "#")));
+
+        var result = SubtitleTxtFormat.Parse(SubtitleTxtFormat.Serialize(original));
+
+        result.Warnings.ShouldBeEmpty();
+        result.Transcript.Segments.Select(s => s.Text).ShouldBe(["#. shop", "#"]);
+        result.Transcript.Segments[0].Words[0].Start.ShouldBe(Ms(1000));
+    }
+
     [Fact]
     public void Parse_word_line_with_spaces_splits_into_words()
     {

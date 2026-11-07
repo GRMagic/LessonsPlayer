@@ -6,7 +6,7 @@ using PlaybackState = LessonsPlayer.Core.Abstractions.PlaybackState;
 namespace LessonsPlayer.Infrastructure.Audio;
 
 /// <summary>
-/// Player baseado em NAudio: <see cref="AudioFileReader"/> + WASAPI compartilhado.
+/// Player baseado em NAudio: <see cref="AudioFileSource"/> (seek exato também em MP3 VBR) + WASAPI compartilhado.
 /// <para>
 /// A posição reportada é a <b>realmente tocada</b> no dispositivo, calculada pelo relógio do WASAPI
 /// (<see cref="IWavePosition.GetPosition"/>) a partir da posição do último seek. A posição de leitura do
@@ -28,7 +28,7 @@ public sealed partial class NAudioPlayer(ILogger<NAudioPlayer> logger) : IAudioP
 {
     private const int LatencyMilliseconds = 80;
 
-    private AudioFileReader? _reader;
+    private AudioFileSource? _reader;
     private EndTrackingWaveProvider? _source;
     private WasapiPlayer? _output;
     private TimeSpan _origin;            // posição do arquivo onde o relógio do dispositivo começou a contar
@@ -87,7 +87,7 @@ public sealed partial class NAudioPlayer(ILogger<NAudioPlayer> logger) : IAudioP
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         Close();
 
-        AudioFileReader? reader = null;
+        AudioFileSource? reader = null;
         EndTrackingWaveProvider? source = null;
         WasapiPlayer? output = null;
         try

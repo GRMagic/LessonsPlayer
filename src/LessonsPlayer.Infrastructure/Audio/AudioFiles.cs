@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using LessonsPlayer.Core.Audio;
-using NAudio.Wave;
 
 namespace LessonsPlayer.Infrastructure.Audio;
 
@@ -8,15 +7,15 @@ namespace LessonsPlayer.Infrastructure.Audio;
 internal static class AudioFiles
 {
     /// <summary>
-    /// Abre o arquivo com <see cref="AudioFileReader"/>. Falhas de decodificação (Media Foundation, cabeçalho
+    /// Abre o arquivo com <see cref="AudioFileSource"/> (seek exato também em MP3 VBR). Falhas de decodificação (Media Foundation, cabeçalho
     /// WAV inválido, arquivo vazio) viram <see cref="UnsupportedAudioFileException"/>; arquivo inexistente ou
     /// sem permissão continuam como exceções de E/S.
     /// </summary>
-    public static AudioFileReader OpenReader(string filePath)
+    public static AudioFileSource OpenReader(string filePath)
     {
         try
         {
-            return new AudioFileReader(filePath);
+            return AudioFileSource.Open(filePath);
         }
         catch (Exception ex) when (ex is COMException or FormatException or InvalidDataException or EndOfStreamException)
         {

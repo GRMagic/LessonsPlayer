@@ -116,6 +116,27 @@ public sealed class TranscriptViewModelTests
         changed.ShouldBe(1);
     }
 
+    /// <summary>
+    /// Descarta uma hipótese do bug "fora de sincronia depois de editar": a edição não desloca os tempos nem o
+    /// índice do karaokê das palavras seguintes (a causa real era o seek do MP3 VBR; ver AudioFileSource).
+    /// </summary>
+    [Fact]
+    public void After_editing_a_word_later_words_keep_their_time_and_highlight()
+    {
+        TimeSpan? requested = null;
+        _vm.SeekRequested += (_, position) => requested = position;
+        _vm.BeginEditWordCommand.Execute(WordAt(0, 1));
+        WordAt(0, 1).EditText = "#.";
+        _vm.CommitEditWordCommand.Execute(WordAt(0, 1));
+
+        _vm.ClickWordCommand.Execute(WordAt(1, 1));
+        _vm.UpdatePosition(Ms(2100));
+
+        requested.ShouldBe(Ms(2000));
+        WordAt(1, 1).State.ShouldBe(WordState.Current);
+        WordAt(0, 1).Model.Start.ShouldBe(Ms(400));
+    }
+
     [Fact]
     public void Cancel_edit_keeps_word()
     {

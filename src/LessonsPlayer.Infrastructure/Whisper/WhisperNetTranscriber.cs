@@ -63,6 +63,17 @@ namespace LessonsPlayer.Infrastructure.Whisper;
 /// isso fez o small.en perder 676 palavras na mesma entrevista.
 /// </para>
 /// <para>
+/// <b>Sobra já ouvida:</b> o VAD estende a fala um pouco além do último trecho do Whisper (folga do detector, sílaba
+/// final). Quando a janela terminava no fim da fala, essa sobra virava uma fatia própria, de ~1 s, com áudio que a
+/// janela anterior já continha, e o modelo completava a frase com texto inventado, todo no mesmo instante. Medido no
+/// áudio de teste do usuário (small): <c>"I'm going to show you how to do that."</c> no silêncio depois de
+/// <c>"application,"</c>. Em 4 áudios reais com 3 modelos, foram 8 fatias assim e nenhuma palavra real: em 5,
+/// texto inventado (<c>"you"</c>, <c>"Bye."</c>, <c>"Thank you."</c>); nas outras, só marcações. Por isso uma fatia
+/// sem fala depois do fim da janela anterior não é decodificada. É o que o Whisper original faz quando a janela termina
+/// com um trecho fechado: avança a janela inteira. A exceção é o recomeço por fala pulada, que decodifica de novo
+/// de propósito.
+/// </para>
+/// <para>
 /// <b>Descarte:</b> liberar o modelo enquanto o whisper.cpp ainda calcula derruba o processo (0xC0000005 em
 /// ggml-cpu-whisper.dll; acontecia ao fechar o app durante uma geração na CPU). Por isso <see cref="Dispose"/>
 /// cancela o trabalho em andamento e espera ele terminar antes de liberar o modelo.
@@ -132,6 +143,7 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
             var language = string.IsNullOrWhiteSpace(settings.Language) ? TranscriptionLanguages.Auto : settings.Language;
             var context = string.Empty;
             var offset = TimeSpan.Zero;
+            TimeSpan? heardUntil = null; // fim da janela anterior: o Whisper já ouviu o áudio até ali
             LogStarted(_logger, audio.Duration, settings.ModelSize, language);
 
             while (audio.Duration - offset >= MinimumRemainder)
@@ -147,7 +159,16 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
                     offset = next;
                 }
 
-                var window = SliceWindow(audio, offset, SliceEnd(audio, offset, settings.Speech));
+                var sliceEnd = SliceEnd(audio, offset, settings.Speech);
+                if (heardUntil is { } until && IsAlreadyHeard(settings.Speech, offset, sliceEnd, until))
+                {
+                    LogAlreadyHeard(_logger, offset, until);
+                    offset = until;
+                    heardUntil = null;
+                    continue;
+                }
+
+                var window = SliceWindow(audio, offset, sliceEnd);
                 var windowEnd = offset + TimeSpan.FromSeconds((double)window.Length / audio.SampleRate);
                 var slice = await DecodeSliceAsync(factory, window, offset, windowEnd, language, context, cancellationToken);
                 if (context.Length > 0 && RepetitionDetector.IsRepetitive(TextOf(slice)))
@@ -158,6 +179,13 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
                     var after = RepetitionDetector.CompressionRatio(TextOf(retry));
                     LogRepetition(_logger, offset, before, after);
                     slice = after < before ? retry : slice;
+                }
+
+                if (_logger.IsEnabled(LogLevel.Debug))
+                {
+                    var speechInSlice = settings.Speech?.SpeechBetween(offset, windowEnd);
+                    var sliceText = TextOf(slice);
+                    LogSlice(_logger, offset, windowEnd, speechInSlice, sliceText);
                 }
 
                 var lastEnd = offset;
@@ -178,7 +206,11 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
                     yield return recognized;
                 }
 
-                offset = NextOffset(slice, offset, windowEnd, lastEnd, settings.Speech);
+                var nextOffset = NextOffset(slice, offset, windowEnd, lastEnd, settings.Speech);
+
+                // Recomeçar antes do último trecho (fala pulada) é de propósito: essa fala precisa ser decodificada de novo.
+                heardUntil = nextOffset < lastEnd ? null : windowEnd;
+                offset = nextOffset;
             }
         }
         finally
@@ -328,6 +360,15 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
         return lastEnd;
     }
 
+    /// <summary>
+    /// Indica se a fatia de <paramref name="offset"/> a <paramref name="sliceEnd"/> só tem fala que a janela anterior,
+    /// até <paramref name="heardUntil"/>, já continha (ver o resumo).
+    /// </summary>
+    private static bool IsAlreadyHeard(SpeechActivity? speech, TimeSpan offset, TimeSpan sliceEnd, TimeSpan heardUntil) =>
+        speech is not null
+        && offset < heardUntil
+        && (sliceEnd <= heardUntil || speech.SpeechBetween(heardUntil, sliceEnd) == TimeSpan.Zero);
+
     private static string TextOf(List<RecognizedSegment> segments) => string.Concat(segments.Select(s => s.Text));
 
     /// <summary>Cabeças de atenção usadas pelo DTW; os modelos .en têm as suas próprias.</summary>
@@ -411,6 +452,12 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
 
     [LoggerMessage(Level = LogLevel.Information, Message = "O modelo pulou fala entre {From} e {To}; a próxima fatia recomeça em {From}")]
     private static partial void LogSkippedSpeech(ILogger logger, TimeSpan from, TimeSpan to);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Sobra de {From} a {To} já ouvida pela janela anterior: não é decodificada")]
+    private static partial void LogAlreadyHeard(ILogger logger, TimeSpan from, TimeSpan to);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Fatia {From} a {To} ({Speech} de fala): {Text}")]
+    private static partial void LogSlice(ILogger logger, TimeSpan from, TimeSpan to, TimeSpan? speech, string text);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Sem fala de {From} a {To}: trecho pulado")]
     private static partial void LogSkipped(ILogger logger, TimeSpan from, TimeSpan to);
