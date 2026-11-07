@@ -26,6 +26,7 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<PlaylistViewModel>();
         services.AddSingleton<TranscriptViewModel>();
         services.AddSingleton<TranscriptionViewModel>();
+        services.AddSingleton<LessonSearchViewModel>();
         services.AddSingleton<MainViewModel>();
 
         services.AddSingleton<MainWindow>();

@@ -47,6 +47,21 @@ public static class UiText
     public const string NoTrack = "No audio open.";
     public const string FollowAudio = "Follow audio";
     public const string SeekToSegmentHint = "Go to the start of this sentence";
+
+    // --- Busca ---
+    public const string SearchPlaceholder = "Search lessons and subtitles";
+    public const string SearchHint = "Search lesson names and what is said in the subtitles (Ctrl+F)";
+    public const string ClearSearch = "Clear search (Esc)";
+    public const string NoLessonNamesMatch = "No lesson names match.";
+    public const string SearchingSubtitles = "Searching the subtitles…";
+
+    public static string SubtitleMatches(int count, bool limited) => count switch
+    {
+        0 => "No matches in the subtitles.",
+        1 => "1 match in the subtitles",
+        _ when limited => string.Create(Culture, $"First {count:N0} matches in the subtitles"),
+        _ => string.Create(Culture, $"{count:N0} matches in the subtitles"),
+    };
     public const string Save = "Save";
     public const string Undo = "Undo";
     public const string Redo = "Redo";

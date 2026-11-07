@@ -30,6 +30,7 @@ public sealed partial class MainViewModel : ObservableObject
         PlaylistViewModel playlist,
         TranscriptViewModel transcript,
         TranscriptionViewModel transcription,
+        LessonSearchViewModel search,
         IDialogService dialogs,
         ISubtitleStore subtitleStore,
         AppSettingsService settings,
@@ -40,6 +41,7 @@ public sealed partial class MainViewModel : ObservableObject
         Playlist = playlist;
         Transcript = transcript;
         Transcription = transcription;
+        Search = search;
         _dialogs = dialogs;
         _subtitleStore = subtitleStore;
         _settings = settings;
@@ -89,6 +91,8 @@ public sealed partial class MainViewModel : ObservableObject
     public TranscriptViewModel Transcript { get; }
 
     public TranscriptionViewModel Transcription { get; }
+
+    public LessonSearchViewModel Search { get; }
 
     /// <summary>Inicialização ao abrir a janela: arquivos da linha de comando ou a última pasta usada.</summary>
     public async Task InitializeAsync(IReadOnlyCollection<string> startupPaths)
@@ -319,11 +323,44 @@ public sealed partial class MainViewModel : ObservableObject
     private bool IsOpen(string audioFilePath) =>
         string.Equals(Transcript.AudioFilePath, audioFilePath, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Atualiza o ícone de legenda na playlist e o que depende dele (o "Excluir legenda").</summary>
+    /// <summary>
+    /// A legenda desta aula mudou (salva, gerada ou excluída): atualiza o ícone na playlist, o "Excluir legenda"
+    /// e a busca, que relê o arquivo.
+    /// </summary>
     private void RefreshSubtitleState(string audioFilePath)
     {
         Playlist.RefreshSubtitleState(audioFilePath);
         DeleteSubtitleCommand.NotifyCanExecuteChanged();
+        Search.Invalidate(audioFilePath);
+    }
+
+    /// <summary>
+    /// Clique num trecho achado pela busca: abre a aula (se for outra; sem tocar, perguntando antes de deixar
+    /// edições não salvas) e vai até o trecho, como o clique no horário dele. O trecho é achado pelo tempo: a aula
+    /// aberta pode ter edições não salvas que mudaram a posição dele.
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenSubtitleMatchAsync(SubtitleMatchViewModel? match)
+    {
+        if (match is null)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(Playlist.CurrentItem, match.Lesson))
+        {
+            await PlayItemAsync(match.Lesson, autoPlay: false, confirmLeave: true);
+            if (!ReferenceEquals(Playlist.CurrentItem, match.Lesson))
+            {
+                return; // o usuário cancelou a troca, ou a aula não abriu
+            }
+        }
+
+        var segment = Transcript.Segments.FirstOrDefault(s => s.Model.Start >= match.Match.Start) ?? Transcript.Segments.LastOrDefault();
+        if (segment is not null)
+        {
+            Transcript.SeekToSegmentCommand.Execute(segment);
+        }
     }
 
     /// <summary>Se a legenda tem alterações, pergunta se salva. Retorna <c>false</c> se o usuário cancelar.</summary>

@@ -16,6 +16,10 @@ A interface é em inglês, porque o programa é usado nas aulas de inglês, ao l
 3. Dê play. Clique em qualquer palavra para ir até ela, ou no horário à esquerda de uma frase para ir ao início dela.
 4. Ao terminar uma aula, o player para nela. Para seguir direto para a próxima da playlist, ligue **Autoplay next**, ao lado dos botões do player; a escolha fica salva.
 
+A busca, acima da playlist, procura em dois lugares:
+- **Nomes das aulas:** a playlist mostra só as aulas cujo nome tem todas as palavras digitadas, sem diferenciar acentos nem maiúsculas ("licao 3" acha "Lição 03"). Anterior/próxima e o Autoplay continuam percorrendo a pasta inteira.
+- **Legendas:** embaixo aparecem as frases das legendas salvas que têm essas palavras, com a aula e o horário. O clique abre a aula e posiciona o áudio no início da frase, sem dar play.
+
 Enquanto uma aula toca, a tela não apaga, porque a turma acompanha a legenda. Enquanto uma legenda é gerada, o Windows também não entra em espera. Os dois pedidos acabam sozinhos quando a aula para ou a geração termina, e também se o programa fechar ou cair. Nenhuma configuração de energia do Windows é alterada.
 
 | Ação | Atalho |
@@ -23,6 +27,7 @@ Enquanto uma aula toca, a tela não apaga, porque a turma acompanha a legenda. E
 | Tocar / pausar | `Espaço` |
 | Voltar / avançar 5 s | `←` / `→` |
 | Faixa anterior / próxima | `Ctrl+←` / `Ctrl+→` |
+| Buscar aulas e texto das legendas / limpar a busca | `Ctrl+F` / `Esc` |
 | Corrigir a palavra selecionada (ou duplo clique) | `F2` |
 | Editar a frase inteira | `Ctrl+E` |
 | Início / fim da palavra = posição atual | `[` / `]` |

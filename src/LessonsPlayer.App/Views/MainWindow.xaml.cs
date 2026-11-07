@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Input;
 using LessonsPlayer.App.Input;
 using LessonsPlayer.Presentation.ViewModels;
 
@@ -24,7 +25,19 @@ public partial class MainWindow : Window
 
         Loaded += OnLoaded;
         Closing += OnClosing;
-        PreviewKeyDown += (_, e) => KeyboardShortcuts.Handle(e, _viewModel);
+        PreviewKeyDown += (_, e) =>
+        {
+            // Ctrl+F é só de view (foco), então fica aqui, e não nos atalhos que disparam comandos.
+            if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                SearchBox.Focus();
+                SearchBox.SelectAll();
+                e.Handled = true;
+                return;
+            }
+
+            KeyboardShortcuts.Handle(e, _viewModel);
+        };
         PreviewTextInput += (_, e) => KeyboardShortcuts.HandleText(e, _viewModel);
         DragOver += OnDragOver;
         Drop += OnDrop;
