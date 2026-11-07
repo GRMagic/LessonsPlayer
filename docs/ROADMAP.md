@@ -56,20 +56,48 @@ Feito em 2026-11-07. O item pedia para desabilitar a opção quando não houvess
 - **Falha:** se a GPU falhar ao carregar o modelo, ou se o runtime Vulkan não carregar, o transcritor usa a CPU e informa isso (`ITranscriber.LoadModelAsync`), e a mensagem diz CPU.
 - A preferência `UseGpu` saiu do `settings.json`; o valor antigo que estiver no arquivo é ignorado.
 
+### Palavras sem alinhamento no fim de uma janela cortada no meio da fala
+Na NASA (small), em duas janelas, as palavras finais ficaram todas no mesmo instante, com duração zero:
+- em 6:25, "United States Senate and the United States Senate have been in the process of making the": texto inventado, por cima da fala real ("from the Massachusetts school issued an apology...");
+- em 11:52–11:55, "Look at that. / Thank you guys so, so much. / It was so awesome.": fala real, mas até 3 s antes do tempo certo.
+
+**Causa (medida):** o DTW do whisper.cpp só alinha o áudio até o último timestamp que o decodificador previu (`n_frames = min(seek_delta, …)`), e não até o fim da janela. O texto que passa desse ponto fica empilhado nele. No 11:52 a janela ia até 11:58,1, mas o decodificador, com trechos de exatamente 1 s, previu o último timestamp em 11:55,45; "Thank you guys so, so much." foi dito de 11:55,9 a 11:57,5. Nos 3 vídeos com 3 modelos houve 14 fatias com palavras empilhadas:
+- 1 a 3 palavras (10 fatias: "can", "now.", "were", "is it?", "about the mission." e outras): todas eram fala real e estavam a até 0,3 s do tempo da legenda automática;
+- 8 a 16 palavras (4 fatias): o texto inventado do 6:25; uma continuação inventada depois do fim da janela (Khan, large, 7:54: "...specific way that it's a little bit more than a plane.", e a fatia seguinte repetiu "That's a specific way"); a frase anterior repetida numa fatia de 1 s no começo da música (StoryCorps, large, 2:02: "I'm going to go back to black and white."); e fala real fora do tempo, junto com "It was so awesome.", uma versão errada de "It was so wonderful", que a fatia seguinte também transcreveu (NASA, small, 11:52).
+
+Nos casos em que as referências discordavam, o próprio áudio decidiu, com o RMS a cada 100 ms e trechos curtos transcritos isolados, sem prompt, com large-v3-turbo, small e medium.
+
+**Correção:** a partir de 4 palavras empilhadas (`UnalignedTail`), a sequência final é descartada, e a fatia seguinte começa no fim da última palavra alinhada, para esse áudio ser decodificado de novo. Se não houver palavra alinhada antes (6:25 e StoryCorps), a fatia é decodificada de novo sem o prompt, como no laço de repetição. A nova versão só fica se o DTW tiver posto alguma palavra no áudio. Sem o prompt, o small transcreveu a fala real do 6:25. No StoryCorps, a nova versão foi só "Music", esticado sobre a fatia inteira; aceita, ela tirava a pontuação das fatias seguintes (o "Music" ia para o prompt), então foi recusada.
+
+**Medido** (antes → depois, mesmas condições; a GPU deu resultados idênticos em duas execuções da `main`):
+- nenhum empilhamento de 4 ou mais palavras; os de 1 a 3 continuam iguais;
+- 6:25: "...school issued an apology saying they did not need to disrespect those affected by the tragedy. And one of President Trump's favorite phrases" no lugar do texto inventado; 23 das 30 palavras da legenda automática casadas, a 0,09 s dela (mediana);
+- 11:52: "Look at that. Thank you guys so so much. It was so wonderful having you on this morning.", sem a duplicata; o erro contra o trecho transcrito isolado caiu de até 3,1 s para até 0,27 s. "It just spins on its own" não foi decodificado (antes saía "It's been on its own.", 3 s adiantado);
+- NASA, small: WER 34,0% → 33,2%, palavras casadas com a automática 1.922 → 1.965, erro de tempo igual (mediana 91 ms, p90 210 ms);
+- Khan, large: WER 3,2% → 2,4% (saíram as 13 palavras inventadas ou repetidas do 7:54); StoryCorps, large: 4,5% → 4,0% (4 palavras casadas a menos: variação do decodificador nas fatias seguintes, como "both hands" → "potions");
+- as outras 5 legendas saíram idênticas.
+
+**Por que não descartar 1 a 3 palavras:** eram fala real no tempo certo. Nos testes TTS, o DTW erra o tempo de uma palavra em 40–80 ms (mediana), e em até ~250 ms (p90). Recomeçar a fatia no fim da palavra anterior pode cair no meio de uma palavra real e perdê-la.
+
+**Teste:** o `UnalignedTailTests` reproduz os padrões de tokens medidos (Khan, 11:52, 6:25, "about the mission."). Com TTS não deu para reproduzir: em 3 aulas de ~55 s com base, small, small.en e large-v3-turbo (13 janelas cortadas no meio da fala), o decodificador sempre fechou o trecho no limite de uma palavra.
+
 ## A investigar
 
-### Palavras sem alinhamento no fim de uma janela cortada no meio da fala
-Na NASA (small), em duas janelas de 30 s cortadas no meio da fala, as palavras finais ficaram todas no último instante da janela, com duração zero:
-- em 6:25, "United States Senate and the United States Senate have been in the process of making the": texto inventado, por cima da fala real ("from the Massachusetts school issued an apology...");
-- em 11:52–11:55, "Look at that. / Thank you guys so, so much. / It was so awesome.": fala real, mas até 2 s antes do tempo certo.
+### Palavras presas aos limites de trechos de 1 s
+Na NASA (small), 11:46–11:52, o decodificador previu trechos de exatamente 1 s ("These are professionals in space." [11:46,45–11:47,45], "That is awesome." [11:47,45–11:48,45]...). O DTW alinhou as palavras no lugar certo ("fidget spinner" em 11:50,37–11:50,87; isolado, o trecho dá 11:50,34–11:50,92), mas o `TokenWordMerger` limita cada palavra ao seu trecho, e elas saíram de 1,5 a 3 s antes, várias com duração zero. Depois da correção das palavras sem alinhamento, o fatiamento mudou e o deslocamento pôs "just awesome. Yeah," (11:34) longe da fala do VAD; o filtro de fala as descartou.
+- Frequência (palavras com o fim do DTW mais de 0,5 s depois do fim do trecho): NASA small 36 em 8 trechos, NASA small.en 5, Khan small.en 1, nos outros 6 casos nenhuma.
+- Ideia a medir: quando o DTW passa do fim do trecho, confiar no DTW (e mover a palavra para o trecho seguinte), em vez de limitar.
 
-Nos dois casos o alinhamento não achou áudio para essas palavras. Uma ideia é descartá-las e começar a fatia seguinte no fim da última palavra alinhada, como já se faz quando o modelo pula fala, para que esse áudio seja decodificado de novo. Precisa ser medido: 1 a 2 palavras isoladas nessa situação eram reais ("can", "is it?") e estavam no tempo certo.
+### Queda nativa ao decodificar MP3 (ACM)
+Em 2026-11-07, uma execução da suíte de integração caiu nos primeiros segundos com 0xC0000005 (evento 1026 do .NET Runtime). A falha foi em `acmStreamPrepareHeader`, chamado pelo `AcmMp3FrameDecompressor` do `Mp3FileReader`, dentro do `AudioFileDecoder`. Desde a correção do seek em MP3 VBR, o `Mp3FileReader` decodifica MP3 pelo ACM do Windows. A execução seguinte, com o mesmo binário, passou. Uma hipótese: vários testes decodificando MP3 em paralelo. No app, a geração de legenda e o player podem abrir o mesmo tipo de leitor ao mesmo tempo.
 
 ### WER do large-v3-turbo maior que na primeira medição com o detector de voz
 Na medição feita durante o desenvolvimento do detector de voz (2026-11-06, 9:47), o large-v3-turbo teve WER de 2,2% no Khan e 3,8% no StoryCorps. Com o código da `main` (2026-11-07), deu 3,3% e 4,5%. Com a correção da "frase completada", deu 3,2% e 4,5%. O small ficou estável: 3,1% → 3,2% no Khan e 6,3% → 6,1% no StoryCorps.
 - O código do transcritor não mudou de comportamento entre o commit do detector e a `main`. A medição de 9:47 pode ter sido feita antes das últimas regras desse commit (recomeço na última palavra, nova decodificação sem prompt quando há laço de repetição, marcações fora do prompt).
 - As diferenças de texto são em palavras curtas e pontuação: "Ah," e o "A" de "A tension" sumiram, e apareceu um "-" no início.
 - A investigar: medir com cada uma dessas regras desligada, e verificar se a GPU dá o mesmo resultado em duas execuções seguidas.
+- Verificado em 2026-11-07: duas execuções da `main` com 12 h de intervalo deram relatórios idênticos nos 3 vídeos com os 3 modelos. A GPU é determinística aqui, então a diferença não vem dela.
+- Com a correção das palavras sem alinhamento, o large deu 2,4% no Khan e 4,0% no StoryCorps. No Khan, 13 dos 14 erros a menos eram uma continuação inventada no fim de uma janela ("...that it's a little bit more than a plane.") e a repetição na fatia seguinte ("That's a specific way that").
 
 ### Geração travada esperando a GPU
 Em 2026-11-06, numa comparação com os vídeos reais (small, StoryCorps), a geração ficou parada por 10 h até ser encerrada à mão. A thread do Whisper estava no `ggml_vk_wait_for_fence` do backend Vulkan, que fica consultando `vkGetFenceStatus` até a GPU terminar. A GPU nunca terminou: a resposta foi `VK_NOT_READY` o tempo todo, com 100% de um núcleo ocupado. O log do Windows não tem reset do driver de vídeo nesse horário. Foi a primeira vez em dezenas de gerações.
@@ -79,6 +107,7 @@ Em 2026-11-06, numa comparação com os vídeos reais (small, StoryCorps), a ger
   - um vigia por janela: se uma janela de 30 s passar de um limite, ela é abandonada e refeita na CPU. A thread presa continua girando até o programa fechar;
   - o Whisper num processo filho, que pode ser encerrado.
 - Antes: ver se um Whisper.net/ggml-vulkan mais novo já corrige isso, e testar com o driver atualizado.
+- Em 2026-11-07, mais duas travas em ~14 rodadas de testes com áudio real. Pelo log nativo, o Whisper.net usa o dispositivo Vulkan 0, que nesta máquina é a Intel Iris Xe, e não a GTX 1650. A pilha .NET mostrava a thread presa no código nativo do `WhisperProcessor`. As duas começaram com o Windows em espera moderna (Kernel-Power 506/507), às 6:47 e às 7:32. Mas várias outras rodadas na espera terminaram normalmente, então não dá para dizer que a espera é a causa.
 
 ## Próximas
 

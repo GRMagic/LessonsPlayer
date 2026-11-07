@@ -63,6 +63,20 @@ namespace LessonsPlayer.Infrastructure.Whisper;
 /// isso fez o small.en perder 676 palavras na mesma entrevista.
 /// </para>
 /// <para>
+/// <b>Palavras sem alinhamento:</b> o DTW só alinha até o último timestamp que o decodificador previu. O texto que
+/// passa desse ponto fica empilhado nele, com duração zero (<see cref="UnalignedTail"/>). Medido na NASA (small):
+/// a janela de 11:28 parou de alinhar em 11:55,45, e <c>"Look at that. Thank you guys so, so much."</c>, ditos de
+/// 11:55,2 a 11:57,5, saíram 2 a 3 s antes. Quando há <see cref="UnalignedTail.MinimumStackedWords"/> ou mais
+/// palavras empilhadas, elas são descartadas e a próxima fatia começa no fim da última palavra alinhada, para esse
+/// áudio ser decodificado de novo. Se não houver palavra alinhada antes delas (na NASA, small, 6:18–6:25: só
+/// <c>"The United States Senate and the United States Senate..."</c>, inventado por cima da fala real), a fatia é
+/// decodificada de novo sem o prompt, como no laço de repetição. A nova versão fica se tiver menos palavras
+/// empilhadas e alguma alinhada; senão, as palavras empilhadas saem e a fatia não entra na legenda. Sem o prompt, o
+/// small transcreveu a fala real do 6:18. Numa fatia de 1 s no começo da música (StoryCorps, large), a nova versão
+/// foi só <c>"Music"</c>, esticado sobre a fatia inteira; quando era aceita, ela ia para o prompt e tirava a
+/// pontuação das fatias seguintes.
+/// </para>
+/// <para>
 /// <b>Sobra já ouvida:</b> o VAD estende a fala um pouco além do último trecho do Whisper (folga do detector, sílaba
 /// final). Quando a janela terminava no fim da fala, essa sobra virava uma fatia própria, de ~1 s, com áudio que a
 /// janela anterior já continha, e o modelo completava a frase com texto inventado, todo no mesmo instante. Medido no
@@ -198,6 +212,21 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
                     slice = after < before ? retry : slice;
                 }
 
+                var tail = UnalignedTail.Find(slice);
+                if (tail is not null && RestartPoint(tail, offset) is null && context.Length > 0)
+                {
+                    // Nada alinhado antes das palavras empilhadas: como no laço de repetição, o prompt costuma ser a causa.
+                    // A nova versão só vale se o DTW tiver posto alguma palavra no áudio; senão, a fatia não entra.
+                    var retry = await DecodeSliceAsync(factory, window, offset, windowEnd, language, string.Empty, cancellationToken);
+                    var retryTail = UnalignedTail.Find(retry);
+                    var accepted = UnalignedTail.HasAlignedWords(retry) && (retryTail?.StackedWords ?? 0) < tail.StackedWords;
+                    LogUnalignedRetry(_logger, offset, tail.StackedWords, retryTail?.StackedWords ?? 0, accepted);
+                    if (accepted)
+                    {
+                        (slice, tail) = (retry, retryTail);
+                    }
+                }
+
                 if (_logger.IsEnabled(LogLevel.Debug))
                 {
                     var speechInSlice = settings.Speech?.SpeechBetween(offset, windowEnd);
@@ -205,7 +234,19 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
                     LogSlice(_logger, offset, windowEnd, speechInSlice, sliceText);
                 }
 
-                var lastEnd = offset;
+                var lastEnd = slice.Select(s => s.End).Append(offset).Max();
+                var nextOffset = NextOffset(slice, offset, windowEnd, lastEnd, settings.Speech);
+                if (tail is not null)
+                {
+                    slice = [.. tail.Kept];
+                    if (RestartPoint(tail, offset) is { } restart && restart < nextOffset)
+                    {
+                        nextOffset = restart;
+                    }
+
+                    LogUnalignedTail(_logger, tail.DroppedWords, tail.AlignedUntil, nextOffset);
+                }
+
                 foreach (var recognized in slice)
                 {
                     if (language == TranscriptionLanguages.Auto && !string.IsNullOrWhiteSpace(recognized.Language))
@@ -219,13 +260,11 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
                         context = Tail(context + recognized.Text, PromptCharacters);
                     }
 
-                    lastEnd = recognized.End > lastEnd ? recognized.End : lastEnd;
                     yield return recognized;
                 }
 
-                var nextOffset = NextOffset(slice, offset, windowEnd, lastEnd, settings.Speech);
-
-                // Recomeçar antes do último trecho (fala pulada) é de propósito: essa fala precisa ser decodificada de novo.
+                // Recomeçar antes do último trecho (fala pulada, palavras sem alinhamento) é de propósito: essa fala
+                // precisa ser decodificada de novo.
                 heardUntil = nextOffset < lastEnd ? null : windowEnd;
                 offset = nextOffset;
             }
@@ -390,6 +429,13 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
     }
 
     /// <summary>
+    /// Onde a próxima fatia recomeça para decodificar de novo o áudio das palavras sem alinhamento: no fim da última
+    /// palavra alinhada, se ela estiver a pelo menos <see cref="MinimumRemainder"/> do início da fatia (ver o resumo).
+    /// </summary>
+    private static TimeSpan? RestartPoint(UnalignedTail tail, TimeSpan offset) =>
+        tail.LastAlignedEnd is { } end && end > offset + MinimumRemainder ? end : null;
+
+    /// <summary>
     /// Indica se a fatia de <paramref name="offset"/> a <paramref name="sliceEnd"/> só tem fala que a janela anterior,
     /// até <paramref name="heardUntil"/>, já continha (ver o resumo).
     /// </summary>
@@ -481,6 +527,14 @@ public sealed partial class WhisperNetTranscriber : ITranscriber, IDisposable
 
     [LoggerMessage(Level = LogLevel.Information, Message = "O modelo pulou fala entre {From} e {To}; a próxima fatia recomeça em {From}")]
     private static partial void LogSkippedSpeech(ILogger logger, TimeSpan from, TimeSpan to);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "{Count} palavras sem alinhamento empilhadas em {At}: descartadas; a próxima fatia começa em {Next}")]
+    private static partial void LogUnalignedTail(ILogger logger, int count, TimeSpan at, TimeSpan next);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Nenhuma palavra alinhada antes das {Before} empilhadas na fatia de {Offset}; sem o prompt: {After} (aceita: {Accepted})")]
+    private static partial void LogUnalignedRetry(ILogger logger, TimeSpan offset, int before, int after, bool accepted);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Sobra de {From} a {To} já ouvida pela janela anterior: não é decodificada")]
     private static partial void LogAlreadyHeard(ILogger logger, TimeSpan from, TimeSpan to);
