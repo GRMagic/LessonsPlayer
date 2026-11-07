@@ -47,7 +47,14 @@ public sealed partial class MainViewModel : ObservableObject
         _logger = logger;
 
         _frameTimer.Tick += (_, _) => OnFrame();
-        Player.PlaybackCompleted += async (_, _) => await PlayNeighborAsync(Playlist.Next());
+        Player.PlaybackCompleted += async (_, _) =>
+        {
+            // Desligado (o padrão), o player só para no fim: o professor decide quando passar para a próxima aula.
+            if (Player.AutoAdvance)
+            {
+                await PlayNeighborAsync(Playlist.Next());
+            }
+        };
         Player.PlaybackFailed += (_, e) => _dialogs.ShowError(UiText.ErrorTitle, UiText.PlaybackFailed(UiText.ErrorReason(e.Exception)));
         Transcript.SeekRequested += (_, position) => Player.Seek(position);
         Transcript.Changed += (_, _) => UpdateTitle();

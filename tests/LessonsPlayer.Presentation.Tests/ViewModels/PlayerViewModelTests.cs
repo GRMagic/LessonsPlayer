@@ -111,6 +111,18 @@ public sealed class PlayerViewModelTests
     }
 
     [Fact]
+    public void Autoplay_is_off_by_default_and_remembered()
+    {
+        _vm.AutoAdvance.ShouldBeFalse();
+
+        _vm.AutoAdvance = true;
+
+        _settingsStore.Stored.AutoAdvance.ShouldBeTrue();
+        using var player = new FakeAudioPlayer();
+        new PlayerViewModel(player, new ImmediateDispatcher(), new AppSettingsService(_settingsStore)).AutoAdvance.ShouldBeTrue();
+    }
+
+    [Fact]
     public void Completed_event_is_forwarded()
     {
         var completed = false;

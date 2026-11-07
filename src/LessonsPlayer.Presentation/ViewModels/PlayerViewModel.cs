@@ -38,12 +38,17 @@ public sealed partial class PlayerViewModel : ObservableObject
     [ObservableProperty]
     private double _volume;
 
+    /// <summary>Ao terminar uma aula, tocar a próxima da playlist. Desligado por padrão: o player para no fim.</summary>
+    [ObservableProperty]
+    private bool _autoAdvance;
+
     public PlayerViewModel(IAudioPlayer player, IUiDispatcher ui, AppSettingsService settings)
     {
         _player = player;
         _ui = ui;
         _settings = settings;
         _volume = settings.Current.Volume;
+        _autoAdvance = settings.Current.AutoAdvance;
         _player.Volume = (float)_volume;
 
         _player.StateChanged += (_, _) => _ui.Post(() => IsPlaying = _player.State == PlaybackState.Playing);
@@ -166,4 +171,7 @@ public sealed partial class PlayerViewModel : ObservableObject
         _player.Volume = (float)value;
         _settings.Update(s => s with { Volume = (float)value });
     }
+
+    partial void OnAutoAdvanceChanged(bool value) =>
+        _settings.Update(s => s with { AutoAdvance = value }, saveNow: true);
 }
