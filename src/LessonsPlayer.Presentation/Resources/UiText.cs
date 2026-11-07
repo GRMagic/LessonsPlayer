@@ -35,6 +35,7 @@ public static class UiText
     // --- Playlist / legenda ---
     public const string PlaylistEmpty = "Abra uma pasta ou um arquivo de áudio\n(ou arraste para cá).";
     public const string HasSubtitleHint = "Tem legenda salva";
+    public const string DeleteSubtitle = "Excluir legenda…";
     public const string TranscriptEmpty = "Este áudio ainda não tem legenda.\nUse \"Gerar legenda\" para criar uma.";
     public const string NoTrack = "Nenhum áudio aberto.";
     public const string FollowAudio = "Seguir áudio";
@@ -61,6 +62,7 @@ public static class UiText
     // --- Diálogos ---
     public const string ErrorTitle = "Não foi possível concluir";
     public const string OverwriteTitle = "Substituir legenda?";
+    public const string DeleteSubtitleTitle = "Excluir legenda?";
     public const string SaveChangesTitle = "Salvar alterações?";
     public const string AudioFilesFilterName = "Arquivos de áudio";
 
@@ -96,6 +98,14 @@ public static class UiText
 
     public static string OverwriteMessage(string fileName) =>
         $"\"{fileName}\" já tem uma legenda. Gerar de novo substitui a legenda atual, incluindo as edições.";
+
+    public static string DeleteSubtitleMessage(string fileName, string subtitlePath, bool discardsChanges) =>
+        $"A legenda de \"{fileName}\" ({Path.GetFileName(subtitlePath)}) será apagada. Não dá para desfazer." +
+        (discardsChanges ? "\n\nAs alterações ainda não salvas também serão perdidas." : string.Empty);
+
+    public static string SubtitleDeleted(string fileName) => $"Legenda de {fileName} excluída.";
+
+    public static string CannotDeleteSubtitle(string reason) => $"Não foi possível excluir a legenda.\n\n{reason}";
 
     public static string SaveChangesMessage(string fileName) =>
         $"A legenda de \"{fileName}\" tem alterações não salvas.";

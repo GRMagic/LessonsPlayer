@@ -29,6 +29,10 @@ Player de áudio para aulas com **legenda estilo karaokê**, gerada localmente c
 
 O botão direito numa palavra abre todas as opções de edição. Ao editar uma frase inteira, as palavras que não mudaram mantêm o tempo original; só as novas ou alteradas recebem tempo redistribuído.
 
+Para apagar a legenda de uma aula, clique com o botão direito nela na playlist (ou selecione e use `Shift+F10`) e escolha **Excluir legenda…**. O programa pede confirmação e avisa se há alterações não salvas, que também são descartadas.
+- A exclusão apaga o `.legenda.txt` e não dá para desfazer.
+- Enquanto a legenda da aula está sendo gerada, a opção fica desabilitada.
+
 ### Modelos
 
 | Modelo | Tamanho | Quando usar |

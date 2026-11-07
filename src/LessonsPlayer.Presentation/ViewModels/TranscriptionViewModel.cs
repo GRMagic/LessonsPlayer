@@ -125,6 +125,12 @@ public sealed partial class TranscriptionViewModel : ObservableObject
 
     public bool IsIdle => !IsRunning;
 
+    /// <summary>
+    /// O áudio da geração em andamento, ou <c>null</c>. Pode ser outro que não o <see cref="TargetAudioFilePath"/>:
+    /// a geração continua quando o usuário troca de faixa.
+    /// </summary>
+    public string? RunningAudioFilePath { get; private set; }
+
     /// <summary>Modelos .en só transcrevem inglês: o idioma escolhido não se aplica a eles.</summary>
     public bool CanChooseLanguage => IsIdle && !SelectedModel.Model.EnglishOnly;
 
@@ -147,6 +153,7 @@ public sealed partial class TranscriptionViewModel : ObservableObject
         var options = new TranscriptionOptions(SelectedModel.Model, SelectedLanguage.Code, UseGpu);
         var progress = new Progress<TranscriptionProgress>(OnProgress); // criado na UI: os relatos voltam para ela
         var stopwatch = Stopwatch.StartNew();
+        RunningAudioFilePath = audioPath; // antes de IsRunning: quem observa IsRunning já encontra o caminho
         IsRunning = true;
 
         try
@@ -180,6 +187,7 @@ public sealed partial class TranscriptionViewModel : ObservableObject
         {
             Progress = 0;
             IsProgressIndeterminate = false;
+            RunningAudioFilePath = null;
             IsRunning = false;
         }
     }

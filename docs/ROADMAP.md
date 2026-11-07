@@ -24,6 +24,13 @@ Relatado pelo usuário: no mesmo áudio de teste, gerado com o small, apareceram
 
 **Por que não só descartar as palavras com duração zero:** no meio de um trecho elas são quase sempre fala real (Khan 8/8, StoryCorps 13/13); o DTW às vezes junta duas palavras no mesmo instante.
 
+### Excluir a legenda de uma aula
+Feito em 2026-11-07. O botão direito num item da playlist (também no ícone CC, ou `Shift+F10` no item selecionado) abre o "Excluir legenda…". Fica desabilitado em aula sem legenda e na aula cuja legenda está sendo gerada, porque a geração a gravaria de novo ao terminar.
+- A confirmação mostra o nome do arquivo e avisa quando há alterações não salvas, que são descartadas junto.
+- Depois de excluir, o ícone CC some, e o painel fica vazio se a aula estava aberta.
+- Verificado na tela: aula sem legenda, exclusão de outra aula e exclusão da aula aberta com uma edição pendente (pelo teclado).
+- De quebra: salvar com `Ctrl+S` uma legenda gerada que não tinha sido gravada agora também mostra o ícone CC. Antes, o ícone só era atualizado no fim da geração.
+
 ## A investigar
 
 ### Palavras sem alinhamento no fim de uma janela cortada no meio da fala
@@ -48,9 +55,6 @@ Em 2026-11-06, numa comparação com os vídeos reais (small, StoryCorps), a ger
 - Antes: ver se um Whisper.net/ggml-vulkan mais novo já corrige isso, e testar com o driver atualizado.
 
 ## Próximas
-
-### Excluir a legenda de uma aula
-Clique com o botão direito no item da playlist ou no ícone CC ao lado do nome → "Excluir legenda". O app pede confirmação, apaga o `.legenda.txt` e atualiza o ícone e o painel. Se a aula estiver aberta com alterações não salvas, elas são descartadas junto (avisar isso na confirmação).
 
 ### Interface em inglês
 Quem usa o programa é o professor de inglês, ao lado dos alunos. Os textos ficam todos em `UiText` (Presentation), então dá para trocar num lugar só. Vale aproveitar e passar para `.resx`, o que deixa outros idiomas possíveis depois.

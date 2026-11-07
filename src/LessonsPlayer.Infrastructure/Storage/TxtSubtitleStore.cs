@@ -54,4 +54,16 @@ public sealed class TxtSubtitleStore : ISubtitleStore
             throw;
         }
     }
+
+    public bool Delete(string audioFilePath)
+    {
+        var path = GetSubtitlePath(audioFilePath);
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+
+        File.Delete(path);
+        return true;
+    }
 }

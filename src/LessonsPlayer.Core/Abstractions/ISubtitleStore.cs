@@ -13,4 +13,7 @@ public interface ISubtitleStore
     Task<ParseResult?> LoadAsync(string audioFilePath, CancellationToken cancellationToken);
 
     Task SaveAsync(string audioFilePath, Transcript transcript, CancellationToken cancellationToken);
+
+    /// <summary>Apaga a legenda do áudio. Retorna <c>false</c> se ela já não existia.</summary>
+    bool Delete(string audioFilePath);
 }

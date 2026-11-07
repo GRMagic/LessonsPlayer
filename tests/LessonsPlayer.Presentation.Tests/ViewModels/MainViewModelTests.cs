@@ -209,6 +209,26 @@ public sealed class MainViewModelTests
         _vm.Title.ShouldStartWith("•");
     }
 
+    /// <summary>Regressão: o ícone de legenda só era atualizado ao fim da geração, não ao salvar depois.</summary>
+    [Fact]
+    public async Task Saving_a_generated_subtitle_that_could_not_be_saved_flags_it_in_playlist()
+    {
+        await _vm.OpenPathsAsync([@"C:\aulas"]);
+        await _vm.NextTrackCommand.ExecuteAsync(null); // aula2, sem legenda
+        _subtitles.FailOnSave = true;
+        _transcriber.TranscribeAsync(default!, default!, TestContext.Current.CancellationToken).ReturnsForAnyArgs(Segments(
+            new RecognizedSegment(Ms(0), Ms(800), " Nova legenda", [])));
+        await _vm.Transcription.GenerateCommand.ExecuteAsync(null);
+        var item = _vm.Playlist.Items[1];
+        item.HasSubtitle.ShouldBeFalse();
+
+        _subtitles.FailOnSave = false;
+        (await _vm.Transcript.SaveAsync(TestContext.Current.CancellationToken)).ShouldBeTrue();
+
+        item.HasSubtitle.ShouldBeTrue();
+        _vm.DeleteSubtitleCommand.CanExecute(item).ShouldBeTrue();
+    }
+
     [Fact]
     public async Task Folder_without_read_permission_shows_a_message_and_keeps_the_playlist()
     {
@@ -269,6 +289,123 @@ public sealed class MainViewModelTests
         stopped.ShouldBeTrue("o transcritor precisa ter parado antes de o app liberar os recursos");
         _vm.Transcription.IsRunning.ShouldBeFalse();
         _subtitles.Saved.ShouldNotContainKey(Aula2);
+    }
+
+    [Fact]
+    public async Task Deleting_the_open_subtitle_removes_the_file_the_icon_and_the_transcript()
+    {
+        await _vm.OpenPathsAsync([@"C:\aulas"]);
+        _dialogs.Confirm(default!, default!).ReturnsForAnyArgs(true);
+        var item = _vm.Playlist.Items[0];
+
+        _vm.DeleteSubtitleCommand.Execute(item);
+
+        _subtitles.Saved.ShouldNotContainKey(Aula1);
+        item.HasSubtitle.ShouldBeFalse();
+        _vm.Transcript.HasTranscript.ShouldBeFalse();
+        _vm.Transcript.AudioFilePath.ShouldBe(Aula1); // a faixa continua aberta, pronta para gerar outra legenda
+        _vm.Transcription.GenerateCommand.CanExecute(null).ShouldBeTrue();
+        _vm.StatusMessage.ShouldBe(Resources.UiText.SubtitleDeleted("aula1.mp3"));
+        _vm.DeleteSubtitleCommand.CanExecute(item).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Declining_the_confirmation_keeps_the_subtitle()
+    {
+        await _vm.OpenPathsAsync([@"C:\aulas"]);
+        _dialogs.Confirm(default!, default!).ReturnsForAnyArgs(false);
+
+        _vm.DeleteSubtitleCommand.Execute(_vm.Playlist.Items[0]);
+
+        _subtitles.Saved.ShouldContainKey(Aula1);
+        _vm.Playlist.Items[0].HasSubtitle.ShouldBeTrue();
+        _vm.Transcript.HasTranscript.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Deleting_with_unsaved_edits_warns_and_discards_them()
+    {
+        await _vm.OpenPathsAsync([@"C:\aulas"]);
+        _vm.Transcript.DeleteWordCommand.Execute(_vm.Transcript.Segments[0].Words[0]);
+        string? message = null;
+        _dialogs.Confirm(default!, default!).ReturnsForAnyArgs(call =>
+        {
+            message = call.ArgAt<string>(1);
+            return true;
+        });
+
+        _vm.DeleteSubtitleCommand.Execute(_vm.Playlist.Items[0]);
+
+        message.ShouldBe(Resources.UiText.DeleteSubtitleMessage("aula1.mp3", _subtitles.GetSubtitlePath(Aula1), discardsChanges: true));
+        _vm.Transcript.IsDirty.ShouldBeFalse();
+        _vm.Title.ShouldNotStartWith("•");
+        _dialogs.DidNotReceiveWithAnyArgs().AskSaveChanges(default!);
+    }
+
+    [Fact]
+    public async Task Deleting_another_lessons_subtitle_keeps_the_open_transcript()
+    {
+        _subtitles.Saved[Aula2] = TwoSegments();
+        await _vm.OpenPathsAsync([@"C:\aulas"]);
+        _vm.Transcript.DeleteWordCommand.Execute(_vm.Transcript.Segments[0].Words[0]);
+        string? message = null;
+        _dialogs.Confirm(default!, default!).ReturnsForAnyArgs(call =>
+        {
+            message = call.ArgAt<string>(1);
+            return true;
+        });
+
+        _vm.DeleteSubtitleCommand.Execute(_vm.Playlist.Items[1]);
+
+        message.ShouldBe(Resources.UiText.DeleteSubtitleMessage("aula2.mp3", _subtitles.GetSubtitlePath(Aula2), discardsChanges: false));
+        _subtitles.Saved.ShouldNotContainKey(Aula2);
+        _vm.Playlist.Items[1].HasSubtitle.ShouldBeFalse();
+        _vm.Transcript.HasTranscript.ShouldBeTrue();
+        _vm.Transcript.IsDirty.ShouldBeTrue("as edições da aula aberta não têm nada a ver com a outra aula");
+    }
+
+    [Fact]
+    public async Task A_failed_delete_shows_the_reason_and_keeps_everything()
+    {
+        await _vm.OpenPathsAsync([@"C:\aulas"]);
+        _dialogs.Confirm(default!, default!).ReturnsForAnyArgs(true);
+        _subtitles.FailOnDelete = true;
+
+        _vm.DeleteSubtitleCommand.Execute(_vm.Playlist.Items[0]);
+
+        _dialogs.Received(1).ShowError(Resources.UiText.ErrorTitle, Resources.UiText.CannotDeleteSubtitle(Resources.UiText.AccessDenied));
+        _vm.Playlist.Items[0].HasSubtitle.ShouldBeTrue();
+        _vm.Transcript.HasTranscript.ShouldBeTrue();
+        _vm.StatusMessage.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Delete_is_unavailable_without_a_subtitle_and_while_that_subtitle_is_being_generated()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await _vm.OpenPathsAsync([@"C:\aulas"]);
+        var (aula1, aula2) = (_vm.Playlist.Items[0], _vm.Playlist.Items[1]);
+        _vm.DeleteSubtitleCommand.CanExecute(aula2).ShouldBeFalse("aula2 não tem legenda");
+        _vm.DeleteSubtitleCommand.CanExecute(null).ShouldBeFalse();
+
+        var started = new TaskCompletionSource();
+        _transcriber.TranscribeAsync(default!, default!, ct)
+            .ReturnsForAnyArgs(call => RunUntilCanceled(started, () => { }, call.ArgAt<CancellationToken>(2)));
+        _dialogs.Confirm(default!, default!).ReturnsForAnyArgs(true); // substituir a legenda atual
+        var canExecuteChanges = 0;
+        _vm.DeleteSubtitleCommand.CanExecuteChanged += (_, _) => canExecuteChanges++;
+        var generation = _vm.Transcription.GenerateCommand.ExecuteAsync(null);
+        await started.Task.WaitAsync(ct);
+
+        _vm.DeleteSubtitleCommand.CanExecute(aula1).ShouldBeFalse("a geração gravaria a legenda de novo ao terminar");
+        canExecuteChanges.ShouldBeGreaterThan(0, "o menu precisa saber que o estado mudou");
+
+        await _vm.NextTrackCommand.ExecuteAsync(null); // trocar de faixa não para a geração da aula1
+        _vm.DeleteSubtitleCommand.CanExecute(aula1).ShouldBeFalse();
+
+        await _vm.Transcription.CancelAndWaitAsync();
+        await generation;
+        _vm.DeleteSubtitleCommand.CanExecute(aula1).ShouldBeTrue();
     }
 
     /// <summary>Transcritor que só para quando cancelado, e ainda leva um tempo para parar (como o whisper.cpp).</summary>

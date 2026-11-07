@@ -63,4 +63,9 @@ internal sealed class InMemorySubtitleStore : ISubtitleStore
         Saved[audioFilePath] = transcript;
         return Task.CompletedTask;
     }
+
+    public bool FailOnDelete { get; set; }
+
+    public bool Delete(string audioFilePath) =>
+        FailOnDelete ? throw new UnauthorizedAccessException("Somente leitura") : Saved.Remove(audioFilePath);
 }
