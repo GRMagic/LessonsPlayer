@@ -5,6 +5,7 @@ using LessonsPlayer.Infrastructure;
 using LessonsPlayer.Infrastructure.Audio;
 using LessonsPlayer.Infrastructure.Whisper;
 using LessonsPlayer.Integration.Tests.Support;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace LessonsPlayer.Integration.Tests;
@@ -34,6 +35,12 @@ public sealed class NonSpeechHallucinationTests : IDisposable
         "Welcome back. Now let's look at a few more examples. I have lived here for ten years. " +
         "She has finished her homework. We have never seen that movie before. " +
         "Thank you for your attention, and see you next time.";
+
+    /// <summary>Termina no meio da frase, como um trecho recortado de um vídeo.</summary>
+    private const string CutEnding =
+        "Hello everybody. In this video I want to talk about a brand new feature, which I think many people " +
+        "have been sleeping on. It can really lead to safer code. So let me show you what I have here. " +
+        "So, a simple console application, and";
 
     private static readonly TimeSpan NonSpeechDuration = TimeSpan.FromSeconds(25);
 
@@ -113,12 +120,66 @@ public sealed class NonSpeechHallucinationTests : IDisposable
             TimeSpan.FromMilliseconds(500), "a primeira palavra depois do trecho sem fala sai no tempo certo");
     }
 
-    private static async Task<Transcript> TranscribeAsync(string audioPath, WhisperModel model, CancellationToken ct)
+    public static TheoryData<string> Models() =>
+        [.. (Environment.GetEnvironmentVariable(ModelsVariable) ?? "base-q5_1,small-q5_1")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+
+    /// <summary>
+    /// Fala cortada no fim e seguida de silêncio digital, como no áudio de teste do usuário. O VAD estende a fala um
+    /// pouco além do último trecho do Whisper, e essa sobra era decodificada numa fatia própria, de 1 s, que a fatia
+    /// anterior já tinha ouvido inteira. Nela o modelo completava a frase: small escreveu
+    /// <c>"I'm going to show you how to do that."</c> depois da última palavra dita, todas as palavras no mesmo
+    /// instante. Medido em 4 áudios reais com 3 modelos: 8 fatias assim, nenhuma palavra real; em 5 delas, texto
+    /// inventado (<c>"you"</c>, <c>"Bye."</c>, <c>"Thank you."</c>), nas outras só marcações.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Models))]
+    public async Task Does_not_decode_again_speech_the_previous_slice_already_heard(string modelId)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var audio = MixedAudio.TryCreate(
+            "en-US",
+            Path.Combine(_workDirectory, "cut"),
+            TestAudioFormat.Mp3,
+            new SpeechPart(CutEnding),
+            new NonSpeechPart(NonSpeechKind.Silence, TimeSpan.FromSeconds(6)));
+        if (audio is null)
+        {
+            Assert.Skip("Nenhuma voz TTS instalada para en-US.");
+        }
+
+        var slices = new SliceLog();
+        var transcript = await TranscribeAsync(audio.FilePath, WhisperModels.FindOrDefault(modelId), ct, slices);
+        var samples = await new AudioFileDecoder().DecodeForSpeechAsync(audio.FilePath, ct);
+        var speech = (await TestSpeechDetector.Create().DetectAsync(samples, ct)).ShouldNotBeNull();
+
+        var output = TestContext.Current.TestOutputHelper!;
+        foreach (var slice in slices.Slices)
+        {
+            output.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"fatia {slice.From.TotalSeconds:F2} -> {slice.To.TotalSeconds:F2} " +
+                $"({speech.SpeechBetween(slice.From, slice.To).TotalSeconds:F2} s de fala): {slice.Text}"));
+        }
+
+        var alreadyHeard = slices.Slices.Zip(slices.Slices.Skip(1))
+            .Where(p => p.Second.From < p.First.To && speech.SpeechBetween(p.First.To, p.Second.To) == TimeSpan.Zero)
+            .Select(p => $"{p.Second.From.TotalSeconds:F2}s: {p.Second.Text}");
+        alreadyHeard.ShouldBeEmpty("fatia só com fala que a fatia anterior já tinha ouvido");
+
+        var speechEnd = audio.NonSpeech[^1].Start;
+        transcript.Segments.SelectMany(s => s.Words)
+            .Where(w => w.Start > speechEnd + EdgeTolerance)
+            .Select(w => $"{w.Start.TotalSeconds:F2}s {w.Text}")
+            .ShouldBeEmpty("texto depois do fim da fala");
+    }
+
+    private static async Task<Transcript> TranscribeAsync(
+        string audioPath, WhisperModel model, CancellationToken ct, ILogger<WhisperNetTranscriber>? transcriberLog = null)
     {
         using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         var models = new HuggingFaceModelStore(
             http, InfrastructureOptions.CreateDefault(), NullLogger<HuggingFaceModelStore>.Instance);
-        using var transcriber = new WhisperNetTranscriber(NullLogger<WhisperNetTranscriber>.Instance);
+        using var transcriber = new WhisperNetTranscriber(transcriberLog ?? NullLogger<WhisperNetTranscriber>.Instance);
         var generator = new SubtitleGenerator(
             models, new AudioFileDecoder(), TestSpeechDetector.Create(), transcriber, TimeProvider.System);
 
