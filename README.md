@@ -109,11 +109,60 @@ dotnet run --project src/LessonsPlayer.App
 
 ### Arquitetura
 
+As dependências apontam só para dentro: o Core não conhece WPF, NAudio nem Whisper.net, e a Presentation é `net10.0` sem WPF, então o compilador impede que um ViewModel dependa da interface.
+
+```mermaid
+flowchart TD
+    App["<b>App</b> (WPF)<br/>views, serviços de UI e composition root<br/>(Generic Host + Serilog)"]
+    Presentation["<b>Presentation</b> (net10.0, sem WPF)<br/>ViewModels MVVM"]
+    Infrastructure["<b>Infrastructure</b><br/>NAudio, Whisper.net, Vulkan, HTTP,<br/>arquivos e energia do Windows"]
+    Core["<b>Core</b><br/>domínio imutável, formato da legenda, editor,<br/>busca, regras puras e interfaces"]
+    App --> Presentation
+    App --> Infrastructure
+    Presentation --> Core
+    Infrastructure --> Core
 ```
-App (WPF: views, serviços de UI, composition root com Generic Host + Serilog)
- ├─► Presentation (ViewModels MVVM, net10.0 sem WPF: o compilador impede dependência de UI)
- └─► Infrastructure (NAudio, Whisper.net, HTTP, arquivos)
-       └─► Core (domínio imutável, formato .txt, editor, regras puras; sem dependências externas)
+
+#### Geração da legenda
+
+```mermaid
+flowchart TD
+    Start(["Generate subtitles"]) --> Awake["O Windows fica acordado durante a geração<br/>(IKeepAwake)"]
+    Awake --> Model["Modelo do Whisper: baixado uma vez<br/>(HuggingFaceModelStore)"]
+    Model --> Decode["Áudio decodificado em 16 kHz mono<br/>(AudioFileDecoder)"]
+    Decode --> Vad["Onde há fala: detector de voz Silero<br/>(SileroSpeechDetector)"]
+    Vad --> Load["Modelo carregado na GPU dedicada, ou na CPU se não houver ou se ela falhar<br/>(VulkanGpuDetector, ITranscriber.LoadModelAsync)"]
+    Load --> Slices["Whisper em fatias de 30 s, pulando os trechos sem fala<br/>(WhisperNetTranscriber)"]
+    Slices --> Words["Tokens viram palavras, com o tempo do alinhamento DTW<br/>(TokenWordMerger)"]
+    Words --> Filter["Texto inventado longe da fala é descartado<br/>(HallucinationFilter)"]
+    Filter --> Sentences["Frases cortadas pelo Whisper são juntadas<br/>(SentenceRegrouper)"]
+    Sentences --> File[("aula.subtitle.txt<br/>(SubtitleTxtFormat, TxtSubtitleStore)")]
+```
+
+Em cada fatia, o `WhisperNetTranscriber` ainda trata os casos medidos em [Notas técnicas](#notas-técnicas-descobertas-com-evidência): a sobra que a fatia anterior já ouviu não é decodificada, as palavras sem alinhamento empilhadas no fim são descartadas, e uma janela presa em repetição é decodificada de novo sem o prompt.
+
+#### Clique numa palavra
+
+```mermaid
+sequenceDiagram
+    actor Teacher as Professor
+    participant View as TranscriptView
+    participant Transcript as TranscriptViewModel
+    participant Main as MainViewModel
+    participant Player as PlayerViewModel + NAudioPlayer
+    Teacher->>View: clique na palavra
+    View->>Transcript: ClickWordCommand
+    Transcript->>Transcript: confirma uma edição pendente e seleciona a palavra
+    Transcript-->>Main: SeekRequested(início da palavra)
+    Main->>Player: Seek(início da palavra)
+    Note over Player: MP3 aberto pelo Mp3FileReader, com índice de quadros: o seek é exato
+    loop a cada quadro (~30 ms)
+        Main->>Player: Refresh()
+        Player-->>Main: posição pelo relógio do WASAPI (o que já saiu no alto-falante)
+        Main->>Transcript: UpdatePosition(posição)
+        Transcript->>Transcript: WordIndex acha a palavra ativa (busca binária)
+        Transcript-->>View: destaca a palavra e a frase
+    end
 ```
 
 - **Core**: `Transcript`/`Segment`/`Word` imutáveis, `SubtitleTxtFormat`, `TranscriptEditor` (desfazer/refazer), `TextRealigner` (LCS), `WordIndex` (busca binária), `TokenWordMerger`, `SentenceRegrouper`, `SpeechActivity`/`HallucinationFilter` (regiões com fala e descarte do texto inventado), `SubtitleGenerator` (caso de uso) e as interfaces implementadas pela Infrastructure.
