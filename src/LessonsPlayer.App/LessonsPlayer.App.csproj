@@ -7,6 +7,8 @@
     <RootNamespace>LessonsPlayer.App</RootNamespace>
     <AssemblyName>LessonsPlayer</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Gerado por tools\make-icon.ps1. Também é o ícone das janelas que não definem um próprio. -->
+    <ApplicationIcon>Assets\LessonsPlayer.ico</ApplicationIcon>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
     <SelfContained Condition="'$(SelfContained)' == ''">false</SelfContained>
   </PropertyGroup>
