@@ -25,6 +25,7 @@ namespace LessonsPlayer.Integration.Tests;
 /// Modelos: <c>LESSONSPLAYER_TEST_MODELS</c> (padrão: small).
 /// </summary>
 [Trait("Category", "Integration")]
+[Trait("Requires", "WhisperModel")] // baixa modelos e transcreve: fora do CI (ver .github/workflows/ci.yml)
 public sealed class RealAudioComparisonTests
 {
     private const string RootVariable = "LESSONSPLAYER_REAL_AUDIO_DIR";

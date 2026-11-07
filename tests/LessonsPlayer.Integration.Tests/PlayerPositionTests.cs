@@ -11,6 +11,7 @@ namespace LessonsPlayer.Integration.Tests;
 /// Toca com volume zero. É ignorado se não houver dispositivo de saída.
 /// </summary>
 [Trait("Category", "Integration")]
+[Trait("Requires", "AudioDevice")] // toca áudio de verdade: o runner do CI não tem placa de som
 public sealed class PlayerPositionTests : IDisposable
 {
     private static readonly TimeSpan Tolerance = TimeSpan.FromMilliseconds(120);

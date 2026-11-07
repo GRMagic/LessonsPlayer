@@ -103,6 +103,16 @@ Feito em 2026-11-07. O desenho é o contorno de um pergaminho (a aula) com um pl
 - `tools/make-icon.ps1` desenha cada tamanho (16 a 256 px) na própria resolução e grava o `.ico` com PNGs. Abaixo de 48 px, as pontas dos rolos ficam lisas.
 - Está no `ApplicationIcon` do projeto, então vale para o `.exe` e para todas as janelas. Verificado na tela: barra de título, caixa de mensagem e barra de tarefas.
 
+### README com diagramas Mermaid
+Feito em 2026-11-07. O README tem três diagramas: as camadas, a geração da legenda (do download do modelo ao `.subtitle.txt`, passando pelo detector de voz, pela GPU e pelos filtros) e o clique numa palavra (seek e relógio do WASAPI até o destaque). Os três foram renderizados com o Mermaid 11 antes de publicar, para conferir a sintaxe.
+
+### GitHub Actions: testes e release a cada push na main
+Feito em 2026-11-07, com o repositório público [GRMagic/LessonsPlayer](https://github.com/GRMagic/LessonsPlayer). O `.github/workflows/ci.yml` roda em `windows-latest`:
+1. o build em Release (warnings como erros) e os testes de unidade (Core e Presentation);
+2. os testes de integração sem as marcas `Requires=WhisperModel` (baixam modelos de centenas de MB e transcrevem na CPU) e `Requires=AudioDevice` (o runner não tem placa de som). Ficam 18, que rodam em segundos;
+3. em push na `main`, se tudo passar: `scripts/publish.ps1 -Version 0.1.<run_number>` (self-contained, win-x64) e um GitHub Release `v0.1.<run_number>` com o zip.
+- **Ainda em aberto:** publicar em arquivo único. O Whisper.net carrega as bibliotecas nativas da pasta `runtimes/` (CPU e Vulkan). Com `PublishSingleFile` + `IncludeNativeLibrariesForSelfExtract`, elas são extraídas para uma pasta temporária, e falta verificar se o carregador do Whisper.net as encontra (`RuntimeOptions.LibraryPath`). Por enquanto, o release é o zip da pasta.
+
 ## A investigar
 
 ### Palavras presas aos limites de trechos de 1 s
@@ -146,15 +156,7 @@ Em 2026-11-07, às 10:04, a suíte de integração caiu com 0xC0000005 no `Whisp
 
 ## Próximas
 
-### GitHub Actions: testes e release a cada push na master
-O projeto ainda não está no GitHub. O workflow (`.github/workflows/release.yml`) roda em `windows-latest`:
-1. `dotnet build` e os testes rápidos (`--filter-not-trait "Category=Integration"`).
-2. Os testes de integração que não dependem de dispositivo de áudio, GPU ou download grande. O runner não tem placa de som e talvez não tenha as vozes pt-BR; esses testes precisam se marcar como "skip" quando faltar o recurso, e alguns já fazem isso.
-3. Se tudo passar: `dotnet publish` win-x64 e um GitHub Release com tag de versão (ex.: `v0.1.<run_number>`).
-- **Em aberto:** publicar em arquivo único. O Whisper.net carrega as bibliotecas nativas da pasta `runtimes/` (CPU e Vulkan). Com `PublishSingleFile` + `IncludeNativeLibrariesForSelfExtract` elas são extraídas para uma pasta temporária, e é preciso verificar se o carregador do Whisper.net as encontra (`RuntimeOptions.LibraryPath`). Se não der, o release continua sendo o zip da pasta.
-
-### README com diagramas Mermaid
-Arquitetura em camadas, fluxo da geração de legenda (download do modelo → decodificação → janelas do Whisper → palavras → frases → `.txt`) e fluxo do clique na palavra (palavra → seek → relógio do WASAPI → destaque).
+Os itens pedidos em 2026-11-06 foram todos feitos. Seguem abertos os de "A investigar" e o de "Futuro".
 
 ## Futuro
 
