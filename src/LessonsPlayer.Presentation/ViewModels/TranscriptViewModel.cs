@@ -291,7 +291,10 @@ public sealed partial class TranscriptViewModel(
     [RelayCommand(CanExecute = nameof(CanRedo))]
     private void Redo() => _editor?.Redo();
 
-    [RelayCommand(CanExecute = nameof(HasAudio))]
+    /// <summary>Só há o que salvar com alterações pendentes (inclui a legenda gerada que não pôde ser gravada).</summary>
+    private bool CanSave => HasAudio && IsDirty;
+
+    [RelayCommand(CanExecute = nameof(CanSave))]
     private async Task Save() => await SaveAsync();
 
     // ----- Infraestrutura interna -----
@@ -396,6 +399,7 @@ public sealed partial class TranscriptViewModel(
         OnPropertyChanged(nameof(CanRedo));
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
+        SaveCommand.NotifyCanExecuteChanged();
         UpdatePosition(_position);
     }
 

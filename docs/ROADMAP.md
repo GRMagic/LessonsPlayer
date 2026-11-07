@@ -93,6 +93,11 @@ Feito em 2026-11-07. A caixa acima da playlist (`Ctrl+F`; `Esc` limpa) procura n
 - **Legendas:** embaixo da playlist aparecem as frases encontradas (até 200), com a aula e o horário. O clique abre a aula, sem dar play, e posiciona o áudio no início da frase, como o clique no horário. A frase é achada pelo tempo, porque a aula aberta pode ter edições não salvas.
 - **Desempenho:** as legendas lidas ficam em memória; a primeira busca lê os arquivos fora da UI. Uma legenda é relida quando é salva, gerada ou excluída, e o cache é refeito ao trocar de pasta. Cada tecla cancela a busca anterior.
 
+### Salvar habilitado só quando há o que salvar
+Feito em 2026-11-07. O botão "Save" (e o `Ctrl+S`) só fica habilitado com alterações pendentes (`CanSave` = há áudio e `IsDirty`).
+- É reavaliado a cada mudança no editor, inclusive ao salvar, ao desfazer e ao refazer. Desfazer depois de salvar volta a habilitar; refazer até o que está gravado desabilita.
+- A legenda gerada que não pôde ser gravada abre já com o "Save" habilitado.
+
 ## A investigar
 
 ### Palavras presas aos limites de trechos de 1 s
@@ -135,9 +140,6 @@ Em 2026-11-07, às 10:04, a suíte de integração caiu com 0xC0000005 no `Whisp
 - **A verificar:** repetir a queda de propósito (na bateria, forçar a espera durante uma geração), e ver se ela some na tomada.
 
 ## Próximas
-
-### Salvar habilitado só quando há o que salvar
-O `SaveCommand` passa a depender de `IsDirty` (com `NotifyCanExecuteChanged` no evento `Changed` do editor).
 
 ### Ícone do programa
 Um ícone simples (por exemplo, um balão de fala com uma onda sonora ou com "CC"), em `.ico` com 16, 32, 48 e 256 px. Ele vai no `ApplicationIcon` do csproj e no `Icon` da janela.
