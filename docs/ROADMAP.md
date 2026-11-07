@@ -98,6 +98,11 @@ Feito em 2026-11-07. O botão "Save" (e o `Ctrl+S`) só fica habilitado com alte
 - É reavaliado a cada mudança no editor, inclusive ao salvar, ao desfazer e ao refazer. Desfazer depois de salvar volta a habilitar; refazer até o que está gravado desabilita.
 - A legenda gerada que não pôde ser gravada abre já com o "Save" habilitado.
 
+### Ícone do programa
+Feito em 2026-11-07. O desenho é o contorno de um pergaminho (a aula) com um play no meio (o player), em branco, sobre um quadrado arredondado no azul do programa. Foi escolhido pelo usuário entre o pergaminho com "CC", com linhas de texto e com play.
+- `tools/make-icon.ps1` desenha cada tamanho (16 a 256 px) na própria resolução e grava o `.ico` com PNGs. Abaixo de 48 px, as pontas dos rolos ficam lisas.
+- Está no `ApplicationIcon` do projeto, então vale para o `.exe` e para todas as janelas. Verificado na tela: barra de título, caixa de mensagem e barra de tarefas.
+
 ## A investigar
 
 ### Palavras presas aos limites de trechos de 1 s
@@ -140,9 +145,6 @@ Em 2026-11-07, às 10:04, a suíte de integração caiu com 0xC0000005 no `Whisp
 - **A verificar:** repetir a queda de propósito (na bateria, forçar a espera durante uma geração), e ver se ela some na tomada.
 
 ## Próximas
-
-### Ícone do programa
-Um ícone simples (por exemplo, um balão de fala com uma onda sonora ou com "CC"), em `.ico` com 16, 32, 48 e 256 px. Ele vai no `ApplicationIcon` do csproj e no `Icon` da janela.
 
 ### GitHub Actions: testes e release a cada push na master
 O projeto ainda não está no GitHub. O workflow (`.github/workflows/release.yml`) roda em `windows-latest`:

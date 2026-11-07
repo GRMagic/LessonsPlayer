@@ -105,6 +105,7 @@ dotnet run --project src/LessonsPlayer.App
 - Os testes de integração baixam modelos e usam as vozes do Windows (pt-BR e en-US). Para testar outros modelos: `$env:LESSONSPLAYER_TEST_MODELS = "small-q5_1,large-v3-turbo-q5_0"`.
 - Áudio real (opcional): `$env:LESSONSPLAYER_REAL_AUDIO_DIR = "<pasta>"`, com uma subpasta por áudio contendo `audio.mp3`, `reference-segments.tsv` (legenda humana: `start_ms, end_ms, text`) e `reference-words.tsv` (legenda automática do YouTube: `start_ms, word`). O `RealAudioComparisonTests` grava `comparison-<modelo>.txt` com WER, erro por palavra e erro no início das frases.
 - No build Debug, `$env:LESSONSPLAYER_DEBUG_SNAPSHOTS = "<pasta>"` faz a janela se salvar em `latest.png` a cada segundo. Serve para testes de UI automatizados, mesmo com a tela bloqueada.
+- O ícone (`src/LessonsPlayer.App/Assets/LessonsPlayer.ico`) é gerado por `tools/make-icon.ps1 -Output <arquivo.ico> [-Preview <folha.png>]`. O desenho é um pergaminho com um play, e cada tamanho, de 16 a 256 px, é desenhado na própria resolução.
 
 ### Arquitetura
 
