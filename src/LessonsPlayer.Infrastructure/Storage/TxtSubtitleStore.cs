@@ -5,12 +5,12 @@ using LessonsPlayer.Core.Subtitles;
 namespace LessonsPlayer.Infrastructure.Storage;
 
 /// <summary>
-/// Guarda a legenda ao lado do áudio: <c>aula01.mp3</c> → <c>aula01.legenda.txt</c>.
+/// Guarda a legenda ao lado do áudio: <c>lesson01.mp3</c> → <c>lesson01.subtitle.txt</c>.
 /// A gravação é atômica: escreve um arquivo temporário e só então substitui o definitivo.
 /// </summary>
 public sealed class TxtSubtitleStore : ISubtitleStore
 {
-    public const string FileSuffix = ".legenda.txt";
+    public const string FileSuffix = ".subtitle.txt";
 
     private static readonly UTF8Encoding Utf8WithoutBom = new(encoderShouldEmitUTF8Identifier: false);
 

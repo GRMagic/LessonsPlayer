@@ -247,7 +247,7 @@ public sealed class MainViewModelTests
     public async Task Regenerating_existing_subtitle_requires_confirmation()
     {
         await _vm.OpenPathsAsync([@"C:\aulas"]); // aula1 já tem legenda
-        _dialogs.Confirm(default!, default!).ReturnsForAnyArgs(false);
+        _dialogs.Confirm(default!, default!, default!).ReturnsForAnyArgs(false);
 
         await _vm.Transcription.GenerateCommand.ExecuteAsync(null);
 
@@ -295,7 +295,7 @@ public sealed class MainViewModelTests
     public async Task Deleting_the_open_subtitle_removes_the_file_the_icon_and_the_transcript()
     {
         await _vm.OpenPathsAsync([@"C:\aulas"]);
-        _dialogs.Confirm(default!, default!).ReturnsForAnyArgs(true);
+        _dialogs.Confirm(default!, default!, default!).ReturnsForAnyArgs(true);
         var item = _vm.Playlist.Items[0];
 
         _vm.DeleteSubtitleCommand.Execute(item);
@@ -313,7 +313,7 @@ public sealed class MainViewModelTests
     public async Task Declining_the_confirmation_keeps_the_subtitle()
     {
         await _vm.OpenPathsAsync([@"C:\aulas"]);
-        _dialogs.Confirm(default!, default!).ReturnsForAnyArgs(false);
+        _dialogs.Confirm(default!, default!, default!).ReturnsForAnyArgs(false);
 
         _vm.DeleteSubtitleCommand.Execute(_vm.Playlist.Items[0]);
 
@@ -328,7 +328,7 @@ public sealed class MainViewModelTests
         await _vm.OpenPathsAsync([@"C:\aulas"]);
         _vm.Transcript.DeleteWordCommand.Execute(_vm.Transcript.Segments[0].Words[0]);
         string? message = null;
-        _dialogs.Confirm(default!, default!).ReturnsForAnyArgs(call =>
+        _dialogs.Confirm(default!, default!, default!).ReturnsForAnyArgs(call =>
         {
             message = call.ArgAt<string>(1);
             return true;
@@ -349,7 +349,7 @@ public sealed class MainViewModelTests
         await _vm.OpenPathsAsync([@"C:\aulas"]);
         _vm.Transcript.DeleteWordCommand.Execute(_vm.Transcript.Segments[0].Words[0]);
         string? message = null;
-        _dialogs.Confirm(default!, default!).ReturnsForAnyArgs(call =>
+        _dialogs.Confirm(default!, default!, default!).ReturnsForAnyArgs(call =>
         {
             message = call.ArgAt<string>(1);
             return true;
@@ -368,7 +368,7 @@ public sealed class MainViewModelTests
     public async Task A_failed_delete_shows_the_reason_and_keeps_everything()
     {
         await _vm.OpenPathsAsync([@"C:\aulas"]);
-        _dialogs.Confirm(default!, default!).ReturnsForAnyArgs(true);
+        _dialogs.Confirm(default!, default!, default!).ReturnsForAnyArgs(true);
         _subtitles.FailOnDelete = true;
 
         _vm.DeleteSubtitleCommand.Execute(_vm.Playlist.Items[0]);
@@ -391,7 +391,7 @@ public sealed class MainViewModelTests
         var started = new TaskCompletionSource();
         _transcriber.TranscribeAsync(default!, default!, ct)
             .ReturnsForAnyArgs(call => RunUntilCanceled(started, () => { }, call.ArgAt<CancellationToken>(2)));
-        _dialogs.Confirm(default!, default!).ReturnsForAnyArgs(true); // substituir a legenda atual
+        _dialogs.Confirm(default!, default!, default!).ReturnsForAnyArgs(true); // substituir a legenda atual
         var canExecuteChanges = 0;
         _vm.DeleteSubtitleCommand.CanExecuteChanged += (_, _) => canExecuteChanges++;
         var generation = _vm.Transcription.GenerateCommand.ExecuteAsync(null);

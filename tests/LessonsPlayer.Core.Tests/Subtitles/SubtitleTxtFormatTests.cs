@@ -17,12 +17,31 @@ public sealed class SubtitleTxtFormatTests
         result.Transcript.ShouldBe(original);
     }
 
+    /// <summary>O cabeçalho é lido pelo usuário no Bloco de Notas, então segue o idioma da interface (inglês).</summary>
+    [Fact]
+    public void Serialize_writes_the_metadata_in_english()
+    {
+        var created = new DateTimeOffset(2026, 11, 4, 10, 15, 0, TimeSpan.FromHours(-3));
+        var transcript = Sample().WithMetadata(new TranscriptMetadata("lesson01.mp3", "small-q5_1", "en", created));
+
+        var header = SubtitleTxtFormat.Serialize(transcript).Split("\r\n").TakeWhile(l => l.Length > 0);
+
+        header.ShouldBe(
+        [
+            "# LessonsPlayer subtitle v1",
+            "# audio: lesson01.mp3",
+            "# model: small-q5_1",
+            "# language: en",
+            "# created: 2026-11-04T10:15:00-03:00",
+        ]);
+    }
+
     [Fact]
     public void Serialize_writes_readable_header_and_word_lines()
     {
         var text = SubtitleTxtFormat.Serialize(Tr(Seg(W(1240, 1610, "Olá"), W(1610, 4880, "pessoal,"))));
 
-        text.ShouldContain("# LessonsPlayer legenda v1");
+        text.ShouldContain("# LessonsPlayer subtitle v1");
         text.ShouldContain("[00:00:01.240 --> 00:00:04.880] Olá pessoal,");
         text.ShouldContain("00:00:01.240 00:00:01.610 Olá");
         text.ShouldContain("00:00:01.610 00:00:04.880 pessoal,");
@@ -63,7 +82,7 @@ public sealed class SubtitleTxtFormatTests
     public void Parse_ignores_unrecognized_lines_and_reports_them()
     {
         const string content = """
-            # LessonsPlayer legenda v1
+            # LessonsPlayer subtitle v1
             00:00:00.000 00:00:00.500 solta
             [00:00:01.000 --> 00:00:02.000] Oi
             00:00:01.000 00:00:02.000 Oi

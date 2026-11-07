@@ -279,7 +279,7 @@ public sealed partial class MainViewModel : ObservableObject
         var isOpen = IsOpen(item.FilePath);
         var message = UiText.DeleteSubtitleMessage(
             item.FileName, _subtitleStore.GetSubtitlePath(item.FilePath), discardsChanges: isOpen && Transcript.IsDirty);
-        if (!_dialogs.Confirm(UiText.DeleteSubtitleTitle, message))
+        if (!_dialogs.Confirm(UiText.DeleteSubtitleTitle, message, UiText.Delete))
         {
             return;
         }

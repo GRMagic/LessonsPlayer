@@ -31,6 +31,15 @@ Feito em 2026-11-07. O botão direito num item da playlist (também no ícone CC
 - Verificado na tela: aula sem legenda, exclusão de outra aula e exclusão da aula aberta com uma edição pendente (pelo teclado).
 - De quebra: salvar com `Ctrl+S` uma legenda gerada que não tinha sido gravada agora também mostra o ícone CC. Antes, o ícone só era atualizado no fim da geração.
 
+### Interface em inglês
+Feito em 2026-11-07. Quem usa o programa é o professor de inglês, ao lado dos alunos. Todos os textos da tela estão em inglês, no `UiText`, incluindo as mensagens de erro do `ErrorReason` e as duas mensagens de exceção que podem chegar à tela (download incompleto e falha de conexão).
+- **Arquivo de legenda:** `.subtitle.txt`, com o cabeçalho `# LessonsPlayer subtitle v1` e as chaves `model`, `language` e `created`. A versão continua v1. O formato em português (`.legenda.txt`, `modelo`, `idioma`, `gerado`) não é mais lido, porque o programa ainda não estava em uso (decisão do usuário).
+- **Caixas de mensagem próprias (`MessageDialog`):** a `MessageBox` do Windows escreve os botões no idioma do sistema ("Sim / Não / Cancelar" num Windows em português). Os botões agora dizem a ação: "Save / Don't save / Cancel", "Delete / Cancel", "Replace / Cancel".
+- **Números em en-US** ("1,234 MB", "45%"), qualquer que seja o idioma do Windows.
+- Os seletores de pasta e de arquivo continuam no idioma do Windows, porque são do sistema.
+- **Não passou para `.resx`:** com um idioma só, o `UiText` em C# é mais simples e o compilador confere os textos com parâmetros. Se surgir um segundo idioma, aí vale o `.resx`.
+- Logs, comentários e a documentação continuam em português.
+
 ## A investigar
 
 ### Palavras sem alinhamento no fim de uma janela cortada no meio da fala
@@ -56,11 +65,6 @@ Em 2026-11-06, numa comparação com os vídeos reais (small, StoryCorps), a ger
 
 ## Próximas
 
-### Interface em inglês
-Quem usa o programa é o professor de inglês, ao lado dos alunos. Os textos ficam todos em `UiText` (Presentation), então dá para trocar num lugar só. Vale aproveitar e passar para `.resx`, o que deixa outros idiomas possíveis depois.
-- Mensagens do sistema traduzidas por `UiText.ErrorReason` também passam para inglês.
-- **Em aberto:** o formato do arquivo de legenda. O cabeçalho (`# LessonsPlayer legenda v1`, `modelo`, `idioma`, `gerado`) e o sufixo `.legenda.txt` também são vistos pelo usuário no Bloco de Notas. Sugestão: gravar em inglês (`# LessonsPlayer subtitle v2`, `.subtitle.txt`) e continuar lendo o formato v1.
-
 ### Clicar no horário da frase vai para o início dela
 Hoje o horário à esquerda de cada trecho é só texto. Ele vira um botão discreto, com o comando `SeekToSegment`, e o clique leva ao início do trecho (a primeira palavra). Também confirma uma edição em andamento, como o clique em palavra.
 
@@ -78,7 +82,7 @@ Uma opção, por exemplo uma caixa "Tocar a próxima ao terminar" perto do playe
 ### Busca de aulas
 Uma caixa de busca acima da playlist que filtra pelo nome da aula (sem acento e sem maiúsculas: "licao" acha "Lição").
 - Opcional: "buscar também no conteúdo" das aulas que têm legenda, mostrando o trecho encontrado. O clique abre a aula e vai até a frase.
-- Para a busca no conteúdo, um índice simples em memória (texto das `.legenda.txt` da pasta, recarregado quando uma legenda muda) basta para centenas de aulas.
+- Para a busca no conteúdo, um índice simples em memória (texto dos `.subtitle.txt` da pasta, recarregado quando uma legenda muda) basta para centenas de aulas.
 
 ### Salvar habilitado só quando há o que salvar
 O `SaveCommand` passa a depender de `IsDirty` (com `NotifyCanExecuteChanged` no evento `Changed` do editor).

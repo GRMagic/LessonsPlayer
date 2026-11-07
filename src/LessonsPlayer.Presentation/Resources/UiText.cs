@@ -6,80 +6,93 @@ using LessonsPlayer.Core.Transcription;
 namespace LessonsPlayer.Presentation.Resources;
 
 /// <summary>
-/// Textos da interface (pt-BR) num só lugar. Os ViewModels usam os métodos de formatação e o XAML
+/// Textos da interface (em inglês) num só lugar. Os ViewModels usam os métodos de formatação e o XAML
 /// usa as constantes via <c>{x:Static}</c>.
 /// </summary>
 public static class UiText
 {
+    /// <summary>
+    /// Cultura dos números e porcentagens: a da interface, e não a do Windows (num Windows em português,
+    /// "1.234 MB" e "45 %" apareceriam no meio do texto em inglês).
+    /// </summary>
+    private static readonly CultureInfo Culture = CultureInfo.GetCultureInfo("en-US");
+
     public const string AppName = "LessonsPlayer";
 
     // --- Barra de ferramentas ---
-    public const string OpenFolder = "Abrir pasta";
-    public const string OpenFile = "Abrir arquivo";
-    public const string GenerateSubtitle = "Gerar legenda";
-    public const string Cancel = "Cancelar";
-    public const string Model = "Modelo";
-    public const string Language = "Idioma";
-    public const string UseGpu = "Usar GPU";
-    public const string UseGpuHint = "Usa a placa de vídeo quando disponível (Vulkan); sem ela, usa a CPU.";
-    public const string EnglishOnlyModelHint = "Os modelos .en transcrevem só inglês; o idioma não se aplica.";
+    public const string OpenFolder = "Open folder";
+    public const string OpenFile = "Open file";
+    public const string GenerateSubtitle = "Generate subtitles";
+    public const string Cancel = "Cancel";
+    public const string Model = "Model";
+    public const string Language = "Language";
+    public const string UseGpu = "Use GPU";
+    public const string UseGpuHint = "Uses the graphics card when available (Vulkan); otherwise, the CPU.";
+    public const string EnglishOnlyModelHint = "The .en models only transcribe English; the language setting doesn't apply.";
 
     // --- Player ---
-    public const string Play = "Tocar";
-    public const string Pause = "Pausar";
-    public const string PlayPauseHint = "Tocar / pausar (Espaço)";
-    public const string PreviousHint = "Faixa anterior (Ctrl+←)";
-    public const string NextHint = "Próxima faixa (Ctrl+→)";
+    public const string Play = "Play";
+    public const string Pause = "Pause";
+    public const string PlayPauseHint = "Play / pause (Space)";
+    public const string PreviousHint = "Previous track (Ctrl+←)";
+    public const string NextHint = "Next track (Ctrl+→)";
     public const string VolumeHint = "Volume";
+    public const string PositionHint = "Position";
 
     // --- Playlist / legenda ---
-    public const string PlaylistEmpty = "Abra uma pasta ou um arquivo de áudio\n(ou arraste para cá).";
-    public const string HasSubtitleHint = "Tem legenda salva";
-    public const string DeleteSubtitle = "Excluir legenda…";
-    public const string TranscriptEmpty = "Este áudio ainda não tem legenda.\nUse \"Gerar legenda\" para criar uma.";
-    public const string NoTrack = "Nenhum áudio aberto.";
-    public const string FollowAudio = "Seguir áudio";
-    public const string Save = "Salvar";
-    public const string Undo = "Desfazer";
-    public const string Redo = "Refazer";
+    public const string PlaylistEmpty = "Open a folder or an audio file\n(or drag it here).";
+    public const string HasSubtitleHint = "Has saved subtitles";
+    public const string DeleteSubtitle = "Delete subtitles…";
+    public const string TranscriptEmpty = "This audio has no subtitles yet.\nUse \"Generate subtitles\" to create them.";
+    public const string NoTrack = "No audio open.";
+    public const string FollowAudio = "Follow audio";
+    public const string Save = "Save";
+    public const string Undo = "Undo";
+    public const string Redo = "Redo";
 
     // --- Menu de edição ---
-    public const string EditWord = "Corrigir palavra (F2)";
-    public const string EditSegment = "Editar frase… (Ctrl+E)";
-    public const string SetStartHere = "Início = posição atual ( [ )";
-    public const string SetEndHere = "Fim = posição atual ( ] )";
-    public const string NudgeStartEarlier = "Início −50 ms (Alt+←)";
-    public const string NudgeStartLater = "Início +50 ms (Alt+→)";
-    public const string NudgeEndEarlier = "Fim −50 ms (Alt+Shift+←)";
-    public const string NudgeEndLater = "Fim +50 ms (Alt+Shift+→)";
-    public const string AdjustTiming = "Ajustar tempo";
-    public const string DeleteWord = "Excluir palavra (Del)";
-    public const string SplitHere = "Dividir frase aqui (Ctrl+D)";
-    public const string MergeWithPrevious = "Juntar com a frase anterior";
-    public const string MergeWithNext = "Juntar com a próxima frase (Ctrl+J)";
-    public const string EditSegmentTitle = "Editar frase";
+    public const string EditWord = "Edit word (F2)";
+    public const string EditSegment = "Edit sentence… (Ctrl+E)";
+    public const string SetStartHere = "Start = current position ( [ )";
+    public const string SetEndHere = "End = current position ( ] )";
+    public const string NudgeStartEarlier = "Start −50 ms (Alt+←)";
+    public const string NudgeStartLater = "Start +50 ms (Alt+→)";
+    public const string NudgeEndEarlier = "End −50 ms (Alt+Shift+←)";
+    public const string NudgeEndLater = "End +50 ms (Alt+Shift+→)";
+    public const string AdjustTiming = "Adjust timing";
+    public const string DeleteWord = "Delete word (Del)";
+    public const string SplitHere = "Split sentence here (Ctrl+D)";
+    public const string MergeWithPrevious = "Merge with previous sentence";
+    public const string MergeWithNext = "Merge with next sentence (Ctrl+J)";
+    public const string EditSegmentTitle = "Edit sentence";
 
     // --- Diálogos ---
-    public const string ErrorTitle = "Não foi possível concluir";
-    public const string OverwriteTitle = "Substituir legenda?";
-    public const string DeleteSubtitleTitle = "Excluir legenda?";
-    public const string SaveChangesTitle = "Salvar alterações?";
-    public const string AudioFilesFilterName = "Arquivos de áudio";
+    public const string ErrorTitle = "Couldn't complete the action";
+    public const string OverwriteTitle = "Replace subtitles?";
+    public const string DeleteSubtitleTitle = "Delete subtitles?";
+    public const string SaveChangesTitle = "Save changes?";
+    public const string AudioFilesFilterName = "Audio files";
 
-    public const string LanguageAuto = "Detectar automaticamente";
+    // Botões com o verbo da ação, e não "Yes/No": a MessageBox do Windows usaria o idioma do sistema.
+    public const string Ok = "OK";
+    public const string Replace = "Replace";
+    public const string Delete = "Delete";
+    public const string DontSave = "Don't save";
 
-    public const string UnsupportedAudioFile = "O arquivo não é um áudio suportado ou está danificado.";
+    public const string LanguageAuto = "Auto-detect";
 
-    public const string AccessDenied = "O Windows não deu permissão para acessar este arquivo ou pasta.";
-    public const string PathNotFound = "O arquivo ou a pasta não existe mais.";
-    public const string FileInUse = "O arquivo está sendo usado por outro programa.";
+    public const string UnsupportedAudioFile = "The file isn't a supported audio format, or it's damaged.";
+
+    public const string AccessDenied = "Windows didn't allow access to this file or folder.";
+    public const string PathNotFound = "The file or folder no longer exists.";
+    public const string FileInUse = "The file is being used by another program.";
 
     private const int SharingViolation = unchecked((int)0x80070020);
     private const int LockViolation = unchecked((int)0x80070021);
 
     /// <summary>
-    /// Motivo de uma falha para mostrar ao usuário. As mensagens do sistema vêm em inglês e citam arquivos
-    /// internos (ex.: o <c>.tmp</c> da gravação), então os casos comuns têm texto próprio.
+    /// Motivo de uma falha para mostrar ao usuário. As mensagens do sistema citam arquivos internos (ex.: o
+    /// <c>.tmp</c> da gravação), então os casos comuns têm texto próprio.
     /// </summary>
     public static string ErrorReason(Exception exception) => exception switch
     {
@@ -91,32 +104,32 @@ public static class UiText
     };
 
     public static string GeneratedButNotSaved(string reason) =>
-        $"A legenda foi gerada, mas não pôde ser salva ao lado do áudio.\n\n{reason}\n\nEla continua aberta, marcada como não salva (•).";
+        $"The subtitles were generated, but they couldn't be saved next to the audio.\n\n{reason}\n\nThey stay open, marked as unsaved (•).";
 
     public static string WindowTitle(string? fileName, bool isDirty) =>
         fileName is null ? AppName : $"{(isDirty ? "• " : string.Empty)}{fileName} — {AppName}";
 
     public static string OverwriteMessage(string fileName) =>
-        $"\"{fileName}\" já tem uma legenda. Gerar de novo substitui a legenda atual, incluindo as edições.";
+        $"\"{fileName}\" already has subtitles. Generating them again replaces the current ones, including your edits.";
 
     public static string DeleteSubtitleMessage(string fileName, string subtitlePath, bool discardsChanges) =>
-        $"A legenda de \"{fileName}\" ({Path.GetFileName(subtitlePath)}) será apagada. Não dá para desfazer." +
-        (discardsChanges ? "\n\nAs alterações ainda não salvas também serão perdidas." : string.Empty);
+        $"The subtitles for \"{fileName}\" ({Path.GetFileName(subtitlePath)}) will be deleted. This can't be undone." +
+        (discardsChanges ? "\n\nUnsaved changes will also be lost." : string.Empty);
 
-    public static string SubtitleDeleted(string fileName) => $"Legenda de {fileName} excluída.";
+    public static string SubtitleDeleted(string fileName) => $"Subtitles for {fileName} deleted.";
 
-    public static string CannotDeleteSubtitle(string reason) => $"Não foi possível excluir a legenda.\n\n{reason}";
+    public static string CannotDeleteSubtitle(string reason) => $"Couldn't delete the subtitles.\n\n{reason}";
 
     public static string SaveChangesMessage(string fileName) =>
-        $"A legenda de \"{fileName}\" tem alterações não salvas.";
+        $"The subtitles for \"{fileName}\" have unsaved changes.";
 
-    public static string CannotOpen(string fileName, string reason) => $"Não foi possível abrir \"{fileName}\".\n\n{reason}";
+    public static string CannotOpen(string fileName, string reason) => $"Couldn't open \"{fileName}\".\n\n{reason}";
 
-    public static string CannotSave(string reason) => $"Não foi possível salvar a legenda.\n\n{reason}";
+    public static string CannotSave(string reason) => $"Couldn't save the subtitles.\n\n{reason}";
 
-    public static string TranscriptionFailed(string reason) => $"A geração da legenda falhou.\n\n{reason}";
+    public static string TranscriptionFailed(string reason) => $"Generating the subtitles failed.\n\n{reason}";
 
-    public static string PlaybackFailed(string reason) => $"A reprodução foi interrompida.\n\n{reason}";
+    public static string PlaybackFailed(string reason) => $"Playback stopped.\n\n{reason}";
 
     /// <summary>Resumo dos problemas da legenda lida, ou <c>null</c> se não houver nenhum.</summary>
     public static string? SubtitleWarnings(int ignoredLines, int correctedTimes)
@@ -125,38 +138,38 @@ public static class UiText
         if (ignoredLines > 0)
         {
             parts.Add(ignoredLines == 1
-                ? "1 linha da legenda não foi reconhecida e foi ignorada"
-                : $"{ignoredLines} linhas da legenda não foram reconhecidas e foram ignoradas");
+                ? "1 line of the subtitle file wasn't recognized and was ignored"
+                : string.Create(Culture, $"{ignoredLines} lines of the subtitle file weren't recognized and were ignored"));
         }
 
         if (correctedTimes > 0)
         {
             parts.Add(correctedTimes == 1
-                ? "1 tempo com fim antes do início foi corrigido"
-                : $"{correctedTimes} tempos com fim antes do início foram corrigidos");
+                ? "1 time that ended before it started was fixed"
+                : string.Create(Culture, $"{correctedTimes} times that ended before they started were fixed"));
         }
 
         return parts.Count == 0 ? null : string.Join("; ", parts) + ".";
     }
 
-    public static string Saved(string path) => $"Legenda salva em {Path.GetFileName(path)}.";
+    public static string Saved(string path) => $"Subtitles saved to {Path.GetFileName(path)}.";
 
     public static string Progress(TranscriptionProgress progress) => progress.Stage switch
     {
         TranscriptionStage.DownloadingModel when progress.Fraction < 1 =>
-            string.Create(CultureInfo.CurrentCulture, $"Baixando modelo… {progress.Fraction:P0}"),
-        TranscriptionStage.DownloadingModel => "Carregando modelo…",
-        TranscriptionStage.DecodingAudio => "Lendo o áudio…",
-        _ => string.Create(CultureInfo.CurrentCulture, $"Transcrevendo… {progress.Fraction:P0}"),
+            string.Create(Culture, $"Downloading model… {progress.Fraction:P0}"),
+        TranscriptionStage.DownloadingModel => "Loading model…",
+        TranscriptionStage.DecodingAudio => "Reading the audio…",
+        _ => string.Create(Culture, $"Transcribing… {progress.Fraction:P0}"),
     };
 
     public static string TranscriptionFinished(string fileName, TimeSpan elapsed, int words) =>
-        string.Create(CultureInfo.CurrentCulture, $"Legenda de \"{fileName}\" gerada em {elapsed:m\\:ss} ({words} palavras).");
+        string.Create(Culture, $"Subtitles for \"{fileName}\" generated in {elapsed:m\\:ss} ({words:N0} words).");
 
     public static string NoSpeechFound(string fileName) =>
-        $"Nenhuma fala reconhecida em \"{fileName}\"; a legenda não foi salva.";
+        $"No speech was recognized in \"{fileName}\"; the subtitles weren't saved.";
 
-    public const string TranscriptionCanceled = "Geração da legenda cancelada.";
+    public const string TranscriptionCanceled = "Subtitle generation canceled.";
 
     public static string WordTooltip(Word word) =>
         $"{Formatting.TimeFormat.Precise(word.Start)} → {Formatting.TimeFormat.Precise(word.End)}";
@@ -164,25 +177,25 @@ public static class UiText
     public static string ModelName(WhisperModel model) => model.EnglishOnly
         ? model.Size switch
         {
-            WhisperModelSize.Base => "Base.en — só inglês, rápido",
-            WhisperModelSize.Small => "Small.en — só inglês, equilíbrio",
-            WhisperModelSize.Medium => "Medium.en — só inglês, mais preciso",
+            WhisperModelSize.Base => "Base.en — English only, fast",
+            WhisperModelSize.Small => "Small.en — English only, balanced",
+            WhisperModelSize.Medium => "Medium.en — English only, more accurate",
             _ => model.Id,
         }
         : model.Size switch
     {
-        WhisperModelSize.Tiny => "Tiny — o mais rápido",
-        WhisperModelSize.Base => "Base — rápido",
-        WhisperModelSize.Small => "Small — equilíbrio (recomendado)",
-        WhisperModelSize.Medium => "Medium — mais preciso, mais lento",
-        WhisperModelSize.LargeV3Turbo => "Large v3 Turbo — o mais preciso",
+        WhisperModelSize.Tiny => "Tiny — fastest",
+        WhisperModelSize.Base => "Base — fast",
+        WhisperModelSize.Small => "Small — balanced (recommended)",
+        WhisperModelSize.Medium => "Medium — more accurate, slower",
+        WhisperModelSize.LargeV3Turbo => "Large v3 Turbo — most accurate",
         _ => model.Id,
     };
 
     public static string ModelSize(WhisperModel model, bool isDownloaded) =>
-        string.Create(CultureInfo.CurrentCulture,
-            $"{model.SizeBytes / 1_000_000.0:N0} MB{(isDownloaded ? " · baixado" : string.Empty)}");
+        string.Create(Culture, $"{model.SizeBytes / 1_000_000.0:N0} MB{(isDownloaded ? " · downloaded" : string.Empty)}");
 
+    /// <summary>Cada idioma pelo próprio nome ("Português", "English"), como nos seletores de idioma.</summary>
     public static string LanguageName(string code)
     {
         if (code == TranscriptionLanguages.Auto)
@@ -190,7 +203,8 @@ public static class UiText
             return LanguageAuto;
         }
 
-        var name = CultureInfo.GetCultureInfo(code).NativeName;
-        return name.Length == 0 ? code : char.ToUpper(name[0], CultureInfo.CurrentCulture) + name[1..];
+        var culture = CultureInfo.GetCultureInfo(code);
+        var name = culture.NativeName;
+        return name.Length == 0 ? code : char.ToUpper(name[0], culture) + name[1..];
     }
 }

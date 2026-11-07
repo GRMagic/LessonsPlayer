@@ -13,7 +13,7 @@ public sealed class PlaylistBuilderTests
             @"C:\aulas\notas.txt",
             @"C:\aulas\aula2.MP3",
             @"C:\aulas\aula1.wav",
-            @"C:\aulas\aula1.legenda.txt",
+            @"C:\aulas\aula1.subtitle.txt",
             @"C:\aulas\Aula3.m4a",
         ]);
 
