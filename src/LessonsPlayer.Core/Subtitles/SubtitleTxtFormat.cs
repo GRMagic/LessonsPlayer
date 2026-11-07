@@ -8,29 +8,29 @@ namespace LessonsPlayer.Core.Subtitles;
 /// <summary>
 /// Lê e grava o formato de legenda próprio do LessonsPlayer (texto puro, editável no Bloco de Notas):
 /// <code>
-/// # LessonsPlayer legenda v1
-/// # audio: aula01.mp3
-/// # modelo: small-q5_1
-/// # idioma: pt
-/// # gerado: 2026-11-04T10:15:00-03:00
+/// # LessonsPlayer subtitle v1
+/// # audio: lesson01.mp3
+/// # model: small-q5_1
+/// # language: en
+/// # created: 2026-11-04T10:15:00-03:00
 ///
-/// [00:00:01.240 --> 00:00:04.880] Olá pessoal, bem-vindos.
-/// 00:00:01.240 00:00:01.610 Olá
-/// 00:00:01.610 00:00:02.150 pessoal,
-/// 00:00:02.150 00:00:04.880 bem-vindos.
+/// [00:00:01.240 --> 00:00:04.880] Hello everyone, welcome.
+/// 00:00:01.240 00:00:01.610 Hello
+/// 00:00:01.610 00:00:02.150 everyone,
+/// 00:00:02.150 00:00:04.880 welcome.
 /// </code>
 /// As linhas de palavra são a fonte da verdade. Um segmento escrito à mão, sem linhas de palavra,
 /// tem o tempo distribuído entre as palavras do texto do cabeçalho.
 /// </summary>
 public static partial class SubtitleTxtFormat
 {
-    internal const string Signature = "# LessonsPlayer legenda v1";
+    internal const string Signature = "# LessonsPlayer subtitle v1";
 
     private const string NewLine = "\r\n";
     private const string KeyAudio = "audio";
-    private const string KeyModel = "modelo";
-    private const string KeyLanguage = "idioma";
-    private const string KeyCreated = "gerado";
+    private const string KeyModel = "model";
+    private const string KeyLanguage = "language";
+    private const string KeyCreated = "created";
 
     public static ParseResult Parse(string content)
     {
@@ -184,9 +184,9 @@ public static partial class SubtitleTxtFormat
         return match.Groups["key"].Value.Trim().ToLowerInvariant() switch
         {
             KeyAudio => metadata with { AudioFileName = value },
-            KeyModel or "model" => metadata with { Model = value },
-            KeyLanguage or "language" => metadata with { Language = value },
-            KeyCreated or "created" when DateTimeOffset.TryParse(
+            KeyModel => metadata with { Model = value },
+            KeyLanguage => metadata with { Language = value },
+            KeyCreated when DateTimeOffset.TryParse(
                 value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var created)
                 => metadata with { CreatedAt = created },
             _ => metadata,

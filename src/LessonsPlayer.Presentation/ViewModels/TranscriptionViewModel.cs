@@ -145,7 +145,7 @@ public sealed partial class TranscriptionViewModel : ObservableObject
         }
 
         var fileName = Path.GetFileName(audioPath);
-        if (_subtitleStore.Exists(audioPath) && !_dialogs.Confirm(UiText.OverwriteTitle, UiText.OverwriteMessage(fileName)))
+        if (_subtitleStore.Exists(audioPath) && !_dialogs.Confirm(UiText.OverwriteTitle, UiText.OverwriteMessage(fileName), UiText.Replace))
         {
             return;
         }

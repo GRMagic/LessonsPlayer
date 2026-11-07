@@ -17,7 +17,8 @@ public interface IDialogService
 
     SaveChangesChoice AskSaveChanges(string fileName);
 
-    bool Confirm(string title, string message);
+    /// <summary>Pede confirmação de uma ação; <paramref name="confirmLabel"/> é o texto do botão que confirma (ex.: "Delete").</summary>
+    bool Confirm(string title, string message, string confirmLabel);
 
     /// <summary>Mostra um editor de texto; retorna <c>null</c> se o usuário cancelar.</summary>
     string? EditText(string title, string initialText);

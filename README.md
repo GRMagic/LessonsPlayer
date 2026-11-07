@@ -9,8 +9,10 @@ Player de áudio para aulas com **legenda estilo karaokê**, gerada localmente c
 
 ## Usando
 
-1. **Abrir pasta** (ou arquivo) e dar duplo clique na faixa.
-2. **Gerar legenda**: escolha o modelo e o idioma ("Detectar automaticamente" funciona bem). Na primeira vez o modelo é baixado.
+A interface é em inglês, porque o programa é usado nas aulas de inglês, ao lado dos alunos.
+
+1. **Open folder** (ou **Open file**) e dar duplo clique na faixa.
+2. **Generate subtitles**: escolha o modelo e o idioma ("Auto-detect" funciona bem). Na primeira vez o modelo é baixado.
 3. Dê play. Clique em qualquer palavra para ir até ela.
 
 | Ação | Atalho |
@@ -29,8 +31,8 @@ Player de áudio para aulas com **legenda estilo karaokê**, gerada localmente c
 
 O botão direito numa palavra abre todas as opções de edição. Ao editar uma frase inteira, as palavras que não mudaram mantêm o tempo original; só as novas ou alteradas recebem tempo redistribuído.
 
-Para apagar a legenda de uma aula, clique com o botão direito nela na playlist (ou selecione e use `Shift+F10`) e escolha **Excluir legenda…**. O programa pede confirmação e avisa se há alterações não salvas, que também são descartadas.
-- A exclusão apaga o `.legenda.txt` e não dá para desfazer.
+Para apagar a legenda de uma aula, clique com o botão direito nela na playlist (ou selecione e use `Shift+F10`) e escolha **Delete subtitles…**. O programa pede confirmação e avisa se há alterações não salvas, que também são descartadas.
+- A exclusão apaga o `.subtitle.txt` e não dá para desfazer.
 - Enquanto a legenda da aula está sendo gerada, a opção fica desabilitada.
 
 ### Modelos
@@ -46,18 +48,18 @@ A precisão do **tempo** das palavras é parecida em todos (veja [Precisão](#pr
 
 ## Formato da legenda
 
-`aula01.mp3` → `aula01.legenda.txt`, na mesma pasta, em UTF-8. Dá para editar no Bloco de Notas:
+`lesson01.mp3` → `lesson01.subtitle.txt`, na mesma pasta, em UTF-8. Dá para editar no Bloco de Notas:
 
 ```
-# LessonsPlayer legenda v1
-# audio: aula01.mp3
-# modelo: small-q5_1
-# idioma: pt
-# gerado: 2026-11-05T14:00:04-03:00
+# LessonsPlayer subtitle v1
+# audio: lesson01.mp3
+# model: small-q5_1
+# language: en
+# created: 2026-11-05T14:00:04-03:00
 
-[00:00:00.180 --> 00:00:07.320] Olá, pessoal! Hoje vamos estudar a diferença entre os tempos verbais do inglês.
-00:00:00.180 00:00:00.420 Olá,
-00:00:00.840 00:00:01.140 pessoal!
+[00:00:00.180 --> 00:00:07.320] Hello, everyone! Today we are going to study the difference between two English tenses.
+00:00:00.180 00:00:00.420 Hello,
+00:00:00.840 00:00:01.140 everyone!
 ...
 ```
 

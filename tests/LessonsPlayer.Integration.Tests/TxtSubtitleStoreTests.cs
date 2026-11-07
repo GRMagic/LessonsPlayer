@@ -34,7 +34,7 @@ public sealed class TxtSubtitleStoreTests : IDisposable
     {
         var audio = Path.Combine(_workDirectory, "aula2.mp3");
         var subtitle = _store.GetSubtitlePath(audio);
-        await File.WriteAllTextAsync(subtitle, "# LessonsPlayer legenda v1\n", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(subtitle, "# LessonsPlayer subtitle v1\n", TestContext.Current.CancellationToken);
         File.SetAttributes(subtitle, FileAttributes.ReadOnly);
         try
         {

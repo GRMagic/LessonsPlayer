@@ -19,7 +19,7 @@ internal static class AudioFiles
         }
         catch (Exception ex) when (ex is COMException or FormatException or InvalidDataException or EndOfStreamException)
         {
-            throw new UnsupportedAudioFileException($"Não foi possível decodificar \"{filePath}\": {ex.Message}", ex);
+            throw new UnsupportedAudioFileException($"Couldn't decode \"{filePath}\": {ex.Message}", ex);
         }
     }
 }

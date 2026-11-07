@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using LessonsPlayer.Core.Abstractions;
 using LessonsPlayer.Core.Audio;
 using LessonsPlayer.Core.Transcription;
+using LessonsPlayer.Presentation.Resources;
 using LessonsPlayer.Presentation.Services;
 using LessonsPlayer.Presentation.Tests.Fakes;
 using LessonsPlayer.Presentation.ViewModels;
@@ -134,7 +135,7 @@ public sealed class TranscriptionViewModelTests
         completed.ShouldNotBeNull();
         completed.IsSaved.ShouldBeFalse();
         completed.Transcript.WordCount.ShouldBe(1);
-        _dialogs.Received(1).ShowError(Arg.Any<string>(), Arg.Is<string>(m => m.StartsWith("A legenda foi gerada", StringComparison.Ordinal)));
+        _dialogs.Received(1).ShowError(Arg.Any<string>(), UiText.GeneratedButNotSaved("Disk full"));
     }
 
     [Fact]

@@ -44,7 +44,7 @@ internal sealed class InMemorySubtitleStore : ISubtitleStore
 
     public bool FailOnSave { get; set; }
 
-    public string GetSubtitlePath(string audioFilePath) => Path.ChangeExtension(audioFilePath, ".legenda.txt");
+    public string GetSubtitlePath(string audioFilePath) => Path.ChangeExtension(audioFilePath, ".subtitle.txt");
 
     public bool Exists(string audioFilePath) => Saved.ContainsKey(audioFilePath);
 
@@ -57,7 +57,7 @@ internal sealed class InMemorySubtitleStore : ISubtitleStore
     {
         if (FailOnSave)
         {
-            throw new IOException("Disco cheio");
+            throw new IOException("Disk full");
         }
 
         Saved[audioFilePath] = transcript;
@@ -67,5 +67,5 @@ internal sealed class InMemorySubtitleStore : ISubtitleStore
     public bool FailOnDelete { get; set; }
 
     public bool Delete(string audioFilePath) =>
-        FailOnDelete ? throw new UnauthorizedAccessException("Somente leitura") : Saved.Remove(audioFilePath);
+        FailOnDelete ? throw new UnauthorizedAccessException("Read-only") : Saved.Remove(audioFilePath);
 }

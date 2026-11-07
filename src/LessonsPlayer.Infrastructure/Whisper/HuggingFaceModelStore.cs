@@ -84,7 +84,7 @@ public sealed partial class HuggingFaceModelStore(
 
             if (total > 0 && received != total)
             {
-                throw new IOException($"Download incompleto: {received} de {total} bytes.");
+                throw new IOException($"Incomplete download: {received} of {total} bytes.");
             }
         }
         finally

@@ -85,7 +85,7 @@ public sealed class RealAudioComparisonTests
         var transcript = await generator.GenerateAsync(audioPath, new TranscriptionOptions(model, "en", UseGpu: true), progress: null, ct);
         stopwatch.Stop();
         await File.WriteAllTextAsync(
-            Path.Combine(folder, $"audio.{model.Id}.legenda.txt"), SubtitleTxtFormat.Serialize(transcript), ct);
+            Path.Combine(folder, $"audio.{model.Id}.subtitle.txt"), SubtitleTxtFormat.Serialize(transcript), ct);
 
         var words = transcript.Segments.SelectMany(s => s.Words).ToList();
         var sb = new StringBuilder();

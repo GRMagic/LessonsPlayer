@@ -109,7 +109,7 @@ internal static class HappyEyeballs
             }
         }
 
-        throw errors.Count == 1 ? errors[0] : new AggregateException("Nenhum endereço aceitou a conexão.", errors);
+        throw errors.Count == 1 ? errors[0] : new AggregateException("No address accepted the connection.", errors);
     }
 
     /// <summary>Intercala as famílias (IPv6, IPv4, IPv6, …) mantendo a ordem do DNS dentro de cada uma.</summary>

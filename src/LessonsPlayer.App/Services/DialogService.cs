@@ -42,18 +42,22 @@ internal sealed class DialogService : IDialogService
 
     public SaveChangesChoice AskSaveChanges(string fileName)
     {
-        var result = Show(UiText.SaveChangesMessage(fileName), UiText.SaveChangesTitle,
-            MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-        return result switch
-        {
-            MessageBoxResult.Yes => SaveChangesChoice.Save,
-            MessageBoxResult.No => SaveChangesChoice.Discard,
-            _ => SaveChangesChoice.Cancel,
-        };
+        var save = new DialogButton(UiText.Save, IsDefault: true);
+        var discard = new DialogButton(UiText.DontSave);
+        var cancel = new DialogButton(UiText.Cancel, IsCancel: true);
+        var chosen = MessageDialog.Show(
+            Owner, UiText.SaveChangesTitle, UiText.SaveChangesMessage(fileName), MessageKind.Question, save, discard, cancel);
+        return chosen == save ? SaveChangesChoice.Save
+            : chosen == discard ? SaveChangesChoice.Discard
+            : SaveChangesChoice.Cancel;
     }
 
-    public bool Confirm(string title, string message) =>
-        Show(message, title, MessageBoxButton.OKCancel, MessageBoxImage.Question) == MessageBoxResult.OK;
+    public bool Confirm(string title, string message, string confirmLabel)
+    {
+        var confirm = new DialogButton(confirmLabel, IsDefault: true);
+        var cancel = new DialogButton(UiText.Cancel, IsCancel: true);
+        return MessageDialog.Show(Owner, title, message, MessageKind.Question, confirm, cancel) == confirm;
+    }
 
     public string? EditText(string title, string initialText)
     {
@@ -62,10 +66,5 @@ internal sealed class DialogService : IDialogService
     }
 
     public void ShowError(string title, string message) =>
-        Show(message, title, MessageBoxButton.OK, MessageBoxImage.Error);
-
-    private static MessageBoxResult Show(string message, string title, MessageBoxButton buttons, MessageBoxImage image) =>
-        Owner is { IsVisible: true } owner
-            ? MessageBox.Show(owner, message, title, buttons, image)
-            : MessageBox.Show(message, title, buttons, image);
+        MessageDialog.Show(Owner, title, message, MessageKind.Error, new DialogButton(UiText.Ok, IsDefault: true, IsCancel: true));
 }
