@@ -127,12 +127,12 @@ Em todas as aulas longas a transcrição foi até a última palavra, com 99–10
 
 O NonSpeechHallucinationTests monta uma aula TTS com 25 s de música ou ruído no meio e no fim. Antes do detector de voz, 6 dos 8 casos (base, small, small.en e large-v3-turbo) falhavam: o base inventava frases inteiras no ruído, e a primeira palavra depois da música saía até 27 s antes de ser dita. Agora não sobra palavra inventada e essa palavra fica a 30 ms do tempo real. A precisão acima não mudou (os 21 casos deram exatamente os mesmos números), porque as aulas TTS não têm pausas de 2 s.
 
-**Áudio real** (`RealAudioComparisonTests`, MP3 do YouTube): uma aula da Khan Academy (10 min, 1 falante), uma conversa do StoryCorps com música de fundo (6 min, 2 falantes) e uma entrevista da NASA via satélite (13 min, 10+ falantes). O texto é comparado com a legenda humana. O tempo é comparado com a legenda automática do YouTube, que é de outro reconhecedor e também tem erro. Números de 2026-11-07, medidos na GPU integrada (Intel Iris Xe), antes da escolha da placa dedicada; nas duas placas, o small deu o mesmo texto:
+**Áudio real** (`RealAudioComparisonTests`, MP3 do YouTube): uma aula da Khan Academy (10 min, 1 falante), uma conversa do StoryCorps com música de fundo (6 min, 2 falantes) e uma entrevista da NASA via satélite (13 min, 10+ falantes). O texto é comparado com a legenda humana. O tempo é comparado com a legenda automática do YouTube, que é de outro reconhecedor e também tem erro. Números de 2026-11-07, com o código atual na GTX 1650. Na Intel Iris Xe o texto muda em pontos ambíguos (~10% das palavras na NASA), com o WER a até 1 ponto de distância para mais ou para menos, e a geração leva de 20% a 40% mais tempo:
 
 | Modelo | WER Khan | WER StoryCorps | Palavra vs. YouTube (mediana): Khan / StoryCorps / NASA | Início de frase vs. legenda humana, Khan (mediana / p90) | Palavras inventadas: StoryCorps / NASA |
 |---|---|---|---|---|---|
 | small | 3,2% | 6,1% | 180 / 50 / 91 ms | 80 / 370 ms | 0 / 0 |
-| small.en | 3,0% | 5,6% | 179 / 50 / 110 ms | 130 / 510 ms | 0 / 0 (eram 6) |
+| small.en | 2,9% | 5,6% | 179 / 50 / 109 ms | 140 / 510 ms | 0 / 0 (eram 6) |
 | large-v3-turbo | 2,4% | 4,0% | 180 / 50 / 90 ms | 160 / 480 ms | 0 (eram 12) / 0 (eram 5) |
 
 - No Khan, todas as palavras ficam ~180 ms **antes** da legenda automática. É um viés constante entre os dois reconhecedores. A legenda humana, que é bem sincronizada nesse vídeo, fica a 80 ms.
