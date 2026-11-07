@@ -166,6 +166,51 @@ public sealed class TranscriptViewModelTests
     }
 
     [Fact]
+    public void Clicking_the_segment_time_goes_to_its_first_word()
+    {
+        TimeSpan? requested = null;
+        _vm.SeekRequested += (_, position) => requested = position;
+
+        _vm.SeekToSegmentCommand.Execute(_vm.Segments[1]);
+
+        requested.ShouldBe(Ms(1500));
+        _vm.SelectedWord.ShouldBe(WordAt(1, 0));
+        WordAt(1, 0).IsSelected.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Clicking_the_segment_time_commits_a_pending_edit_in_another_segment()
+    {
+        TimeSpan? requested = null;
+        _vm.SeekRequested += (_, position) => requested = position;
+        _vm.BeginEditWordCommand.Execute(WordAt(1, 1));
+        WordAt(1, 1).EditText = "amigos";
+
+        _vm.SeekToSegmentCommand.Execute(_vm.Segments[0]);
+
+        _vm.Segments[1].Model.Text.ShouldBe("bem amigos");
+        _vm.SelectedWord.ShouldBe(WordAt(0, 0));
+        requested.ShouldBe(Ms(0));
+    }
+
+    /// <summary>O clique numa palavra em edição não confirma nada; o clique no horário confirma até essa palavra.</summary>
+    [Fact]
+    public void Clicking_the_segment_time_commits_an_edit_of_its_own_first_word()
+    {
+        TimeSpan? requested = null;
+        _vm.SeekRequested += (_, position) => requested = position;
+        _vm.BeginEditWordCommand.Execute(WordAt(0, 0));
+        WordAt(0, 0).EditText = "Oi";
+
+        _vm.SeekToSegmentCommand.Execute(_vm.Segments[0]);
+
+        _vm.Segments[0].Model.Text.ShouldBe("Oi pessoal");
+        _vm.SelectedWord.ShouldBe(WordAt(0, 0)); // a palavra nova, no trecho recriado
+        _vm.SelectedWord!.IsEditing.ShouldBeFalse();
+        requested.ShouldBe(Ms(0));
+    }
+
+    [Fact]
     public void Starting_to_edit_another_word_commits_the_previous_edit()
     {
         _vm.BeginEditWordCommand.Execute(WordAt(0, 0));

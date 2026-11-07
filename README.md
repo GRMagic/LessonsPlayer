@@ -13,7 +13,7 @@ A interface é em inglês, porque o programa é usado nas aulas de inglês, ao l
 
 1. **Open folder** (ou **Open file**) e dar duplo clique na faixa.
 2. **Generate subtitles**: escolha o modelo e o idioma ("Auto-detect" funciona bem). Na primeira vez o modelo é baixado.
-3. Dê play. Clique em qualquer palavra para ir até ela.
+3. Dê play. Clique em qualquer palavra para ir até ela, ou no horário à esquerda de uma frase para ir ao início dela.
 
 | Ação | Atalho |
 |---|---|

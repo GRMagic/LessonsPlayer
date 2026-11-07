@@ -75,8 +75,17 @@
                 <ColumnDefinition Width="*" />
               </Grid.ColumnDefinitions>
 
-              <TextBlock Text="{Binding StartText}" Style="{StaticResource Muted}" FontSize="12"
-                         VerticalAlignment="Top" Margin="0,6,0,0" />
+              <!-- Botão discreto: o clique vai para o início do trecho. Não é focável, como as palavras, para
+                   não tirar o foco de uma edição inline (o comando a confirma). -->
+              <Button Style="{StaticResource FlatButton}" Padding="4,2" Margin="-4,4,0,0"
+                      HorizontalAlignment="Left" VerticalAlignment="Top"
+                      ToolTip="{x:Static res:UiText.SeekToSegmentHint}"
+                      AutomationProperties.Name="{Binding StartText}"
+                      AutomationProperties.HelpText="{x:Static res:UiText.SeekToSegmentHint}"
+                      Command="{Binding DataContext.SeekToSegmentCommand, RelativeSource={RelativeSource AncestorType={x:Type ListBox}}}"
+                      CommandParameter="{Binding}">
+                <TextBlock Text="{Binding StartText}" Style="{StaticResource Muted}" FontSize="12" />
+              </Button>
 
               <ItemsControl Grid.Column="1" ItemsSource="{Binding Words}" Focusable="False">
                 <ItemsControl.ItemsPanel>

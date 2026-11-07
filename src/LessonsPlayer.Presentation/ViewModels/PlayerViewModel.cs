@@ -21,7 +21,7 @@ public sealed partial class PlayerViewModel : ObservableObject
     private double _positionSeconds;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DurationText))]
+    [NotifyPropertyChangedFor(nameof(DurationText), nameof(SliderMaximum))]
     private double _durationSeconds;
 
     [ObservableProperty]
@@ -67,6 +67,12 @@ public sealed partial class PlayerViewModel : ObservableObject
     public string PositionText => TimeFormat.Compact(TimeSpan.FromSeconds(PositionSeconds));
 
     public string DurationText => TimeFormat.Compact(TimeSpan.FromSeconds(DurationSeconds));
+
+    /// <summary>
+    /// Máximo da barra de posição. Sem faixa a duração é 0, e com mínimo e máximo iguais o WPF desenha o
+    /// marcador no fim da barra (visto depois de falhar ao abrir um arquivo); com 1, ele fica no início.
+    /// </summary>
+    public double SliderMaximum => DurationSeconds > 0 ? DurationSeconds : 1;
 
     /// <summary>Abre o arquivo (parado no início). Exceções de formato/arquivo são propagadas.</summary>
     public void Load(string filePath)

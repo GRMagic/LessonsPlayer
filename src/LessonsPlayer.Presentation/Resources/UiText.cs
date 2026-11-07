@@ -46,6 +46,7 @@ public static class UiText
     public const string TranscriptEmpty = "This audio has no subtitles yet.\nUse \"Generate subtitles\" to create them.";
     public const string NoTrack = "No audio open.";
     public const string FollowAudio = "Follow audio";
+    public const string SeekToSegmentHint = "Go to the start of this sentence";
     public const string Save = "Save";
     public const string Undo = "Undo";
     public const string Redo = "Redo";

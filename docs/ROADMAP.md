@@ -40,6 +40,14 @@ Feito em 2026-11-07. Quem usa o programa é o professor de inglês, ao lado dos 
 - **Não passou para `.resx`:** com um idioma só, o `UiText` em C# é mais simples e o compilador confere os textos com parâmetros. Se surgir um segundo idioma, aí vale o `.resx`.
 - Logs, comentários e a documentação continuam em português.
 
+### Clicar no horário da frase vai para o início dela
+Feito em 2026-11-07. O horário à esquerda de cada trecho virou um botão discreto (`SeekToSegment`), com a dica "Go to the start of this sentence".
+- O clique seleciona a primeira palavra do trecho e posiciona o áudio nela.
+- Antes, confirma a edição inline em andamento, inclusive a da própria primeira palavra. Depois disso a palavra é reencontrada pelo tempo, porque a confirmação recria o trecho.
+- O botão não é focável, como as palavras, para não tirar o foco de uma edição.
+- Verificado na tela: com uma palavra em edição no primeiro trecho, o clique em "0:10" confirmou a edição e levou o áudio a 10,98 s, o início exato do trecho.
+- **De quebra:** sem faixa aberta (por exemplo, depois de falhar ao abrir um arquivo), o marcador da barra de posição aparecia no fim. O WPF faz isso quando mínimo e máximo são iguais (0 e 0). Agora o máximo da barra nunca é 0.
+
 ## A investigar
 
 ### Palavras sem alinhamento no fim de uma janela cortada no meio da fala
@@ -64,9 +72,6 @@ Em 2026-11-06, numa comparação com os vídeos reais (small, StoryCorps), a ger
 - Antes: ver se um Whisper.net/ggml-vulkan mais novo já corrige isso, e testar com o driver atualizado.
 
 ## Próximas
-
-### Clicar no horário da frase vai para o início dela
-Hoje o horário à esquerda de cada trecho é só texto. Ele vira um botão discreto, com o comando `SeekToSegment`, e o clique leva ao início do trecho (a primeira palavra). Também confirma uma edição em andamento, como o clique em palavra.
 
 ### "Usar GPU" só quando houver GPU
 Desabilitar a opção, e tratá-la como desmarcada, quando não houver GPU utilizável.

@@ -27,6 +27,18 @@ public sealed class PlayerViewModelTests
         _vm.PlayPauseCommand.CanExecute(null).ShouldBeTrue();
     }
 
+    /// <summary>Regressão: sem faixa (ex.: depois de falhar ao abrir), o marcador da barra ia para o fim.</summary>
+    [Fact]
+    public void Slider_maximum_is_the_duration_and_never_zero()
+    {
+        _vm.SliderMaximum.ShouldBe(180);
+
+        _vm.Unload();
+
+        _vm.DurationSeconds.ShouldBe(0);
+        _vm.SliderMaximum.ShouldBe(1, "com mínimo e máximo iguais o WPF desenha o marcador no fim da barra");
+    }
+
     [Fact]
     public void Refresh_updates_slider_without_seeking()
     {
