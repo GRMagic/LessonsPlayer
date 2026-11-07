@@ -5,11 +5,13 @@
 .EXAMPLE
   ./scripts/publish.ps1
   ./scripts/publish.ps1 -Runtime win-arm64
+  ./scripts/publish.ps1 -Version 0.1.42   # versão do .exe (o CI usa o número da execução)
 #>
 [CmdletBinding()]
 param(
     [string] $Runtime = 'win-x64',
-    [string] $Configuration = 'Release'
+    [string] $Configuration = 'Release',
+    [string] $Version
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,12 +22,16 @@ $zip = "$output.zip"
 if (Test-Path $output) { Remove-Item -Recurse -Force $output }
 if (Test-Path $zip) { Remove-Item -Force $zip }
 
+# Uma lista vazia some na chamada; um $null viraria um argumento vazio para o dotnet.
+$versionArgs = if ($Version) { @("-p:Version=$Version") } else { @() }
+
 # Sem PublishSingleFile: o Whisper.net carrega as bibliotecas nativas da pasta runtimes/.
 dotnet publish (Join-Path $root 'src/LessonsPlayer.App/LessonsPlayer.App.csproj') `
     --configuration $Configuration `
     --runtime $Runtime `
     --self-contained `
     -p:PublishReadyToRun=true `
+    @versionArgs `
     --output $output
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish falhou ($LASTEXITCODE)" }
 

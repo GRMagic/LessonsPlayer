@@ -14,6 +14,7 @@ namespace LessonsPlayer.Integration.Tests;
 /// ggml-cpu-whisper.dll).
 /// </summary>
 [Trait("Category", "Integration")]
+[Trait("Requires", "WhisperModel")] // baixa modelos e transcreve: fora do CI (ver .github/workflows/ci.yml)
 public sealed class TranscriberShutdownTests : IDisposable
 {
     private const string Text =

@@ -22,6 +22,7 @@ namespace LessonsPlayer.Integration.Tests;
 /// <see cref="TimestampPrecisionTests"/>.
 /// </summary>
 [Trait("Category", "Integration")]
+[Trait("Requires", "WhisperModel")] // baixa modelos e transcreve: fora do CI (ver .github/workflows/ci.yml)
 public sealed class NonSpeechHallucinationTests : IDisposable
 {
     private const string ModelsVariable = "LESSONSPLAYER_TEST_MODELS";

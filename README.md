@@ -1,5 +1,7 @@
 # LessonsPlayer
 
+[![CI](https://github.com/GRMagic/LessonsPlayer/actions/workflows/ci.yml/badge.svg)](https://github.com/GRMagic/LessonsPlayer/actions/workflows/ci.yml)
+
 Player de áudio para aulas com **legenda estilo karaokê**, gerada localmente com Whisper. A palavra falada fica destacada enquanto o áudio toca, e um **clique numa palavra leva o áudio ao instante em que ela é dita**. A legenda é salva num `.txt` ao lado do áudio, pode ser editada e é reaberta automaticamente.
 
 - Playlist a partir de uma pasta (ordem natural: `aula2` antes de `aula10`), de um arquivo avulso ou por arrastar e soltar.
@@ -77,6 +79,8 @@ A precisão do **tempo** das palavras é parecida em todos (veja [Precisão](#pr
 
 ## Distribuição
 
+O zip pronto fica em [Releases](https://github.com/GRMagic/LessonsPlayer/releases): a cada push na `main` que passa nos testes, o GitHub Actions publica uma versão nova (`v0.1.<número da execução>`). Para gerar localmente:
+
 ```powershell
 ./scripts/publish.ps1          # gera artifacts/publish/LessonsPlayer-win-x64 (+ .zip)
 ```
@@ -102,6 +106,7 @@ dotnet test --project tests/LessonsPlayer.Integration.Tests # Whisper real, TTS 
 dotnet run --project src/LessonsPlayer.App
 ```
 
+- O CI (`.github/workflows/ci.yml`, num Windows sem placa de som nem GPU) roda o build, os testes de unidade e os de integração sem as marcas `Requires=WhisperModel` e `Requires=AudioDevice`. Os marcados rodam só localmente.
 - Os testes de integração baixam modelos e usam as vozes do Windows (pt-BR e en-US). Para testar outros modelos: `$env:LESSONSPLAYER_TEST_MODELS = "small-q5_1,large-v3-turbo-q5_0"`.
 - Áudio real (opcional): `$env:LESSONSPLAYER_REAL_AUDIO_DIR = "<pasta>"`, com uma subpasta por áudio contendo `audio.mp3`, `reference-segments.tsv` (legenda humana: `start_ms, end_ms, text`) e `reference-words.tsv` (legenda automática do YouTube: `start_ms, word`). O `RealAudioComparisonTests` grava `comparison-<modelo>.txt` com WER, erro por palavra e erro no início das frases.
 - No build Debug, `$env:LESSONSPLAYER_DEBUG_SNAPSHOTS = "<pasta>"` faz a janela se salvar em `latest.png` a cada segundo. Serve para testes de UI automatizados, mesmo com a tela bloqueada.
