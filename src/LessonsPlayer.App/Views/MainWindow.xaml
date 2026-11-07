@@ -182,10 +182,20 @@
             <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}"
                      BorderThickness="0" Background="Transparent" Padding="4,0"
                      HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              <ListBox.Resources>
+                <!-- Um menu por item (x:Shared): o DataContext dele é o item. O Tag do item leva o MainViewModel. -->
+                <ContextMenu x:Key="PlaylistItemMenu" x:Shared="False">
+                  <MenuItem Header="{x:Static res:UiText.DeleteSubtitle}" CommandParameter="{Binding}"
+                            Command="{Binding PlacementTarget.Tag.DeleteSubtitleCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}" />
+                </ContextMenu>
+              </ListBox.Resources>
               <ListBox.ItemContainerStyle>
-                <!-- Sem isso, leitores de tela anunciam o nome da classe do ViewModel. -->
                 <Style TargetType="{x:Type ListBoxItem}">
+                  <!-- Sem isso, leitores de tela anunciam o nome da classe do ViewModel. -->
                   <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
+                  <!-- No item (e não no conteúdo), o menu também abre pelo teclado (Shift+F10). -->
+                  <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" />
+                  <Setter Property="ContextMenu" Value="{StaticResource PlaylistItemMenu}" />
                 </Style>
               </ListBox.ItemContainerStyle>
               <ListBox.InputBindings>

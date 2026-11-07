@@ -51,8 +51,20 @@ public sealed partial class MainViewModel : ObservableObject
         Player.PlaybackFailed += (_, e) => _dialogs.ShowError(UiText.ErrorTitle, UiText.PlaybackFailed(UiText.ErrorReason(e.Exception)));
         Transcript.SeekRequested += (_, position) => Player.Seek(position);
         Transcript.Changed += (_, _) => UpdateTitle();
-        Transcript.Saved += (_, subtitlePath) => StatusMessage = UiText.Saved(subtitlePath);
+        Transcript.Saved += (_, subtitlePath) =>
+        {
+            // Uma legenda gerada que não pôde ser gravada só passa a existir aqui.
+            RefreshSubtitleState(Transcript.AudioFilePath!);
+            StatusMessage = UiText.Saved(subtitlePath);
+        };
         Transcription.Completed += OnTranscriptionCompleted;
+        Transcription.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(TranscriptionViewModel.IsRunning))
+            {
+                DeleteSubtitleCommand.NotifyCanExecuteChanged();
+            }
+        };
         Playlist.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(PlaylistViewModel.IsEmpty))
@@ -251,6 +263,62 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Apaga a legenda de uma aula, depois de confirmar. Se a aula está aberta, o painel fica vazio e as
+    /// alterações não salvas vão junto (a confirmação avisa). A legenda que está sendo gerada não pode ser
+    /// apagada: a geração a gravaria de novo ao terminar.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanDeleteSubtitle))]
+    private void DeleteSubtitle(PlaylistItemViewModel? item)
+    {
+        if (item is null || !CanDeleteSubtitle(item))
+        {
+            return;
+        }
+
+        var isOpen = IsOpen(item.FilePath);
+        var message = UiText.DeleteSubtitleMessage(
+            item.FileName, _subtitleStore.GetSubtitlePath(item.FilePath), discardsChanges: isOpen && Transcript.IsDirty);
+        if (!_dialogs.Confirm(UiText.DeleteSubtitleTitle, message))
+        {
+            return;
+        }
+
+        try
+        {
+            _subtitleStore.Delete(item.FilePath); // se já tinha sumido por fora, o resultado é o mesmo
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogDeleteFailed(_logger, ex, item.FilePath);
+            _dialogs.ShowError(UiText.ErrorTitle, UiText.CannotDeleteSubtitle(UiText.ErrorReason(ex)));
+            return;
+        }
+
+        if (isOpen)
+        {
+            Transcript.Load(item.FilePath, null);
+        }
+
+        RefreshSubtitleState(item.FilePath);
+        UpdateTitle();
+        StatusMessage = UiText.SubtitleDeleted(item.FileName);
+    }
+
+    private bool CanDeleteSubtitle(PlaylistItemViewModel? item) =>
+        item is { HasSubtitle: true }
+        && !string.Equals(Transcription.RunningAudioFilePath, item.FilePath, StringComparison.OrdinalIgnoreCase);
+
+    private bool IsOpen(string audioFilePath) =>
+        string.Equals(Transcript.AudioFilePath, audioFilePath, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Atualiza o ícone de legenda na playlist e o que depende dele (o "Excluir legenda").</summary>
+    private void RefreshSubtitleState(string audioFilePath)
+    {
+        Playlist.RefreshSubtitleState(audioFilePath);
+        DeleteSubtitleCommand.NotifyCanExecuteChanged();
+    }
+
     /// <summary>Se a legenda tem alterações, pergunta se salva. Retorna <c>false</c> se o usuário cancelar.</summary>
     private async Task<bool> ConfirmLeaveTranscriptAsync()
     {
@@ -269,8 +337,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void OnTranscriptionCompleted(object? sender, TranscriptionCompletedEventArgs e)
     {
-        Playlist.RefreshSubtitleState(e.AudioFilePath);
-        if (string.Equals(e.AudioFilePath, Transcript.AudioFilePath, StringComparison.OrdinalIgnoreCase))
+        RefreshSubtitleState(e.AudioFilePath);
+        if (IsOpen(e.AudioFilePath))
         {
             Transcript.Load(e.AudioFilePath, e.Transcript, e.IsSaved);
         }
@@ -290,4 +358,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Não foi possível abrir {FilePath}")]
     private static partial void LogOpenFailed(ILogger logger, Exception exception, string filePath);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Não foi possível excluir a legenda de {AudioFilePath}")]
+    private static partial void LogDeleteFailed(ILogger logger, Exception exception, string audioFilePath);
 }
