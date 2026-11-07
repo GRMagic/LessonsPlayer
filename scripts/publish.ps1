@@ -22,8 +22,9 @@ $zip = "$output.zip"
 if (Test-Path $output) { Remove-Item -Recurse -Force $output }
 if (Test-Path $zip) { Remove-Item -Force $zip }
 
+# [string[]]: um "if" devolve a string solta, e o splat de uma string passaria um argumento por caractere (pwsh 7).
 # Uma lista vazia some na chamada; um $null viraria um argumento vazio para o dotnet.
-$versionArgs = if ($Version) { @("-p:Version=$Version") } else { @() }
+[string[]] $versionArgs = if ($Version) { "-p:Version=$Version" } else { @() }
 
 # Sem PublishSingleFile: o Whisper.net carrega as bibliotecas nativas da pasta runtimes/.
 dotnet publish (Join-Path $root 'src/LessonsPlayer.App/LessonsPlayer.App.csproj') `
