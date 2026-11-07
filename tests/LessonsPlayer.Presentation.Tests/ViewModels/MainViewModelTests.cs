@@ -43,7 +43,8 @@ public sealed class MainViewModelTests
             new PlayerViewModel(_player, dispatcher, settings),
             new PlaylistViewModel(_playlistSource, _subtitles),
             new TranscriptViewModel(_subtitles, _dialogs, NullLogger<TranscriptViewModel>.Instance),
-            new TranscriptionViewModel(generator, _subtitles, models, _dialogs, settings, NullLogger<TranscriptionViewModel>.Instance),
+            new TranscriptionViewModel(
+                generator, _subtitles, models, Substitute.For<IGpuDetector>(), _dialogs, settings, NullLogger<TranscriptionViewModel>.Instance),
             _dialogs,
             _subtitles,
             settings,

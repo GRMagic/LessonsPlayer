@@ -82,7 +82,7 @@ public sealed class RealAudioComparisonTests
         var generator = new SubtitleGenerator(models, new AudioFileDecoder(), TestSpeechDetector.Create(), transcriber, TimeProvider.System);
 
         var stopwatch = Stopwatch.StartNew();
-        var transcript = await generator.GenerateAsync(audioPath, new TranscriptionOptions(model, "en", UseGpu: true), progress: null, ct);
+        var transcript = await generator.GenerateAsync(audioPath, new TranscriptionOptions(model, "en", await TestGpu.FindAsync()), progress: null, ct);
         stopwatch.Stop();
         await File.WriteAllTextAsync(
             Path.Combine(folder, $"audio.{model.Id}.subtitle.txt"), SubtitleTxtFormat.Serialize(transcript), ct);

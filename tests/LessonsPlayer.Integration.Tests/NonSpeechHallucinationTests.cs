@@ -184,7 +184,7 @@ public sealed class NonSpeechHallucinationTests : IDisposable
             models, new AudioFileDecoder(), TestSpeechDetector.Create(), transcriber, TimeProvider.System);
 
         return await generator.GenerateAsync(
-            audioPath, new TranscriptionOptions(model, "en", UseGpu: true), progress: null, ct);
+            audioPath, new TranscriptionOptions(model, "en", await TestGpu.FindAsync()), progress: null, ct);
     }
 
     private static double Percentile(double[] sorted, double p) =>

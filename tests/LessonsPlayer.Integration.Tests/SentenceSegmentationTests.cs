@@ -92,7 +92,7 @@ public sealed class SentenceSegmentationTests : IDisposable
         var generator = new SubtitleGenerator(models, new AudioFileDecoder(), TestSpeechDetector.Create(), transcriber, TimeProvider.System);
 
         return await generator.GenerateAsync(
-            audioPath, new TranscriptionOptions(model, "en", UseGpu: true), progress: null, ct);
+            audioPath, new TranscriptionOptions(model, "en", await TestGpu.FindAsync()), progress: null, ct);
     }
 
     /// <summary>Trechos (fora o último) que não terminam em pontuação final.</summary>
@@ -109,6 +109,9 @@ public sealed class SentenceSegmentationTests : IDisposable
     private sealed class RecordingTranscriber(ITranscriber inner) : ITranscriber
     {
         public List<RecognizedSegment> Segments { get; } = [];
+
+        public Task<GpuDevice?> LoadModelAsync(TranscriberSettings settings, CancellationToken cancellationToken) =>
+            inner.LoadModelAsync(settings, cancellationToken);
 
         public async IAsyncEnumerable<RecognizedSegment> TranscribeAsync(
             AudioSamples audio,
